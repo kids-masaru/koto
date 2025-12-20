@@ -1,41 +1,108 @@
+from flask import Flask, request, Response
 import json
+import os
 import sys
+import hashlib
+import hmac
+import base64
 
-def process_chat_message(request):
-    """Google Chat HTTP Endpoint Handler"""
-    
-    print(f"Request method: {request.method}", file=sys.stderr)
-    
-    if request.method == 'GET':
-        return 'Hello from Koto (Python)!', 200
+app = Flask(__name__)
 
-    # Get JSON data
+# LINE credentials (will be set via environment variables)
+LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
+
+def verify_signature(body, signature):
+    """Verify LINE webhook signature"""
+    if not LINE_CHANNEL_SECRET:
+        return True  # Skip verification if secret not set (for testing)
+    
+    hash = hmac.new(
+        LINE_CHANNEL_SECRET.encode('utf-8'),
+        body.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+    expected_signature = base64.b64encode(hash).decode('utf-8')
+    return hmac.compare_digest(signature, expected_signature)
+
+def reply_message(reply_token, text):
+    """Send reply via LINE Messaging API"""
+    import urllib.request
+    
+    url = 'https://api.line.me/v2/bot/message/reply'
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+    }
+    data = {
+        'replyToken': reply_token,
+        'messages': [{'type': 'text', 'text': text}]
+    }
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode('utf-8'),
+        headers=headers,
+        method='POST'
+    )
+    
     try:
-        data = request.get_json(silent=True, force=True)
-        print(f"Received data: {json.dumps(data) if data else 'None'}", file=sys.stderr)
+        with urllib.request.urlopen(req) as res:
+            print(f"Reply sent successfully: {res.status}", file=sys.stderr)
+    except Exception as e:
+        print(f"Reply error: {e}", file=sys.stderr)
+
+@app.route('/', methods=['GET'])
+def health_check():
+    return 'Koto LINE Bot is running!', 200
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """LINE webhook endpoint"""
+    
+    # Get signature from header
+    signature = request.headers.get('X-Line-Signature', '')
+    body = request.get_data(as_text=True)
+    
+    print(f"=== LINE Webhook ===", file=sys.stderr)
+    print(f"Body: {body[:200]}...", file=sys.stderr)
+    
+    # Verify signature
+    if not verify_signature(body, signature):
+        print("Invalid signature", file=sys.stderr)
+        return 'Invalid signature', 400
+    
+    # Parse events
+    try:
+        data = json.loads(body)
+        events = data.get('events', [])
     except Exception as e:
         print(f"JSON parse error: {e}", file=sys.stderr)
-        return {"text": "Error parsing request"}
+        return 'OK', 200
+    
+    # Process each event
+    for event in events:
+        event_type = event.get('type')
+        print(f"Event type: {event_type}", file=sys.stderr)
+        
+        if event_type == 'message':
+            message = event.get('message', {})
+            message_type = message.get('type')
+            
+            if message_type == 'text':
+                user_text = message.get('text', '')
+                reply_token = event.get('replyToken')
+                
+                print(f"Received: {user_text}", file=sys.stderr)
+                
+                # Echo response
+                response_text = f"こんにちは！「{user_text}」を受け取りました 🎉"
+                
+                if reply_token:
+                    reply_message(reply_token, response_text)
+    
+    return 'OK', 200
 
-    if not data:
-        return {"text": "No data received"}
-
-    # Extract text from Workspace Add-on format (chat.messagePayload.message.text)
-    original_text = ""
-    
-    if 'chat' in data and 'messagePayload' in data['chat']:
-        msg = data['chat']['messagePayload'].get('message', {})
-        original_text = msg.get('text', '')
-    # Fallback: Standard Chat App format
-    elif 'message' in data and 'text' in data['message']:
-        original_text = data['message']['text']
-    
-    if not original_text:
-        original_text = "(テキスト取得失敗)"
-
-    response_text = f"【Koto】届きました！: {original_text}"
-    
-    print(f"Sending response: {response_text}", file=sys.stderr)
-    
-    # Return dict directly - functions-framework will serialize to JSON
-    return {"text": response_text}
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
