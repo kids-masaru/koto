@@ -8,8 +8,8 @@ ENV PYTHONUNBUFFERED True
 WORKDIR /app
 COPY . ./
 
-# Install production dependencies.
-RUN pip install --no-cache-dir flask gunicorn
+# Install production dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Run with gunicorn for production
 CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 2 --timeout 60 main:app
