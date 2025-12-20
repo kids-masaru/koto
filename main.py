@@ -6,9 +6,21 @@ import hashlib
 import hmac
 import base64
 import urllib.request
+import re
+import math
+import tempfile
+from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from collections import defaultdict
+
+# PDF library
+try:
+    import fitz  # PyMuPDF
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    print("PyMuPDF not available", file=sys.stderr)
 
 app = Flask(__name__)
 
@@ -24,11 +36,13 @@ GOOGLE_SERVICE_ACCOUNT_KEY = os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY', '{}')
 GOOGLE_DELEGATED_USER = os.environ.get('GOOGLE_DELEGATED_USER', '')
 
 # Conversation history storage (in-memory, per user)
-# Format: {user_id: [{"role": "user/model", "text": "..."}]}
 conversation_history = defaultdict(list)
-MAX_HISTORY = 20  # Keep last 20 messages per user
+MAX_HISTORY = 50  # 50件に変更
 
-# Koto's personality - 20代後半の女性秘書
+# Temporary storage for PDFs sent by users
+user_pdf_cache = {}
+
+# Koto's personality
 SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 
 【性格】
@@ -42,7 +56,6 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「了解です！やっておきますね〜」
 - 「確認しました！3件ありましたよ」
 - 「ドキュメント作成しますね。タイトルは何にしましょう？」
-- 「ちょっと待ってくださいね、調べてみます」
 
 【やってはいけないこと】
 - 毎回自己紹介しない
@@ -51,19 +64,22 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 堅苦しい敬語を使わない
 
 【できること】
-- Googleドキュメントの作成・編集
-- Googleスプレッドシートの作成・編集
-- Googleスライドの作成
+- Googleドキュメント/スプレッドシート/スライドの作成
 - Googleドライブの検索
 - Gmailの確認・要約
-- 一般的な質問への回答
+- PDF読み取り・テキスト抽出
+- 計算（正確に計算できます）
+- 日付計算
+- Webページの情報取得
 
 【重要】
 - ユーザーとの過去の会話を覚えています
-- 「それ」「あれ」「いいですよ」などの指示語は、直前の会話から文脈を理解して対応してください
-- わからない場合だけ確認してください
+- 「それ」「あれ」「いいですよ」などの指示語は、直前の会話から文脈を理解して対応
+- わからない場合だけ確認する
+- 計算はcalculate関数を使う（正確）
+- PDF読み取りはread_pdf関数を使う（高速）
 
-ユーザーからの依頼に対して、必要なら確認を取りながら、てきぱきと対応してください。"""
+ユーザーからの依頼に対して、てきぱきと対応してください。"""
 
 # Google API scopes
 SCOPES = [
@@ -89,6 +105,191 @@ def get_google_credentials():
     except Exception as e:
         print(f"Credentials error: {e}", file=sys.stderr)
         return None
+
+# ============ Python-based Tools (Fast & Accurate) ============
+
+def calculate(expression):
+    """
+    Safe calculator - evaluates mathematical expressions
+    Supports: +, -, *, /, **, sqrt, sin, cos, tan, log, etc.
+    """
+    try:
+        # Clean and validate expression
+        expr = expression.strip()
+        
+        # Replace common notation
+        expr = expr.replace('×', '*').replace('÷', '/').replace('^', '**')
+        expr = expr.replace('√', 'sqrt')
+        
+        # Allowed functions and constants
+        safe_dict = {
+            'sqrt': math.sqrt,
+            'sin': math.sin,
+            'cos': math.cos,
+            'tan': math.tan,
+            'log': math.log,
+            'log10': math.log10,
+            'abs': abs,
+            'round': round,
+            'pi': math.pi,
+            'e': math.e,
+            'pow': pow,
+        }
+        
+        # Validate - only allow safe characters
+        if not re.match(r'^[\d\s\+\-\*\/\.\(\)\,a-z\_]+$', expr.lower()):
+            return {"error": f"無効な文字が含まれています: {expr}"}
+        
+        result = eval(expr, {"__builtins__": {}}, safe_dict)
+        
+        # Format result
+        if isinstance(result, float):
+            if result.is_integer():
+                result = int(result)
+            else:
+                result = round(result, 10)
+        
+        return {"success": True, "expression": expression, "result": result}
+    except Exception as e:
+        return {"error": f"計算エラー: {str(e)}"}
+
+def calculate_date(operation, days=0, date_str=None):
+    """
+    Date calculator
+    Operations: today, add_days, subtract_days, weekday, days_until
+    """
+    try:
+        if date_str:
+            base_date = datetime.strptime(date_str, '%Y-%m-%d')
+        else:
+            base_date = datetime.now()
+        
+        if operation == 'today':
+            result = datetime.now()
+            weekday_names = ['月', '火', '水', '木', '金', '土', '日']
+            return {
+                "success": True,
+                "date": result.strftime('%Y年%m月%d日'),
+                "weekday": weekday_names[result.weekday()] + '曜日',
+                "time": result.strftime('%H:%M')
+            }
+        elif operation == 'add_days':
+            result = base_date + timedelta(days=days)
+            weekday_names = ['月', '火', '水', '木', '金', '土', '日']
+            return {
+                "success": True,
+                "date": result.strftime('%Y年%m月%d日'),
+                "weekday": weekday_names[result.weekday()] + '曜日'
+            }
+        elif operation == 'subtract_days':
+            result = base_date - timedelta(days=days)
+            weekday_names = ['月', '火', '水', '木', '金', '土', '日']
+            return {
+                "success": True,
+                "date": result.strftime('%Y年%m月%d日'),
+                "weekday": weekday_names[result.weekday()] + '曜日'
+            }
+        elif operation == 'days_until':
+            target = datetime.strptime(date_str, '%Y-%m-%d')
+            diff = (target - datetime.now()).days
+            return {"success": True, "days": diff, "target": date_str}
+        else:
+            return {"error": f"Unknown operation: {operation}"}
+    except Exception as e:
+        return {"error": f"日付計算エラー: {str(e)}"}
+
+def read_pdf_from_drive(file_id):
+    """Download and read PDF from Google Drive"""
+    try:
+        if not PDF_AVAILABLE:
+            return {"error": "PDF読み取り機能が利用できません"}
+        
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証エラー"}
+        
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Download file
+        request = drive_service.files().get_media(fileId=file_id)
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            tmp.write(request.execute())
+            tmp_path = tmp.name
+        
+        # Read PDF
+        doc = fitz.open(tmp_path)
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        doc.close()
+        
+        # Cleanup
+        os.unlink(tmp_path)
+        
+        # Truncate if too long
+        if len(text) > 10000:
+            text = text[:10000] + "\n...(以下省略)"
+        
+        return {"success": True, "text": text, "pages": len(doc)}
+    except Exception as e:
+        print(f"PDF error: {e}", file=sys.stderr)
+        return {"error": f"PDF読み取りエラー: {str(e)}"}
+
+def search_and_read_pdf(query):
+    """Search Drive for PDF and read it"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証エラー"}
+        
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Search for PDF
+        results = drive_service.files().list(
+            q=f"name contains '{query}' and mimeType='application/pdf' and trashed=false",
+            pageSize=1,
+            fields="files(id, name)"
+        ).execute()
+        
+        files = results.get('files', [])
+        if not files:
+            return {"error": f"'{query}'に該当するPDFが見つかりませんでした"}
+        
+        file_info = files[0]
+        pdf_result = read_pdf_from_drive(file_info['id'])
+        
+        if pdf_result.get('success'):
+            pdf_result['filename'] = file_info['name']
+        
+        return pdf_result
+    except Exception as e:
+        return {"error": str(e)}
+
+def fetch_url(url):
+    """Fetch content from URL"""
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as res:
+            content = res.read().decode('utf-8', errors='ignore')
+            
+            # Simple HTML to text (remove tags)
+            content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL)
+            content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL)
+            content = re.sub(r'<[^>]+>', ' ', content)
+            content = re.sub(r'\s+', ' ', content).strip()
+            
+            if len(content) > 5000:
+                content = content[:5000] + "..."
+            
+            return {"success": True, "content": content, "url": url}
+    except Exception as e:
+        return {"error": f"URL取得エラー: {str(e)}"}
+
+# ============ Google Workspace Tools ============
 
 def create_google_doc(title, content=""):
     """Create a Google Doc"""
@@ -136,7 +337,6 @@ def create_google_sheet(title, data=None):
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
         return {"success": True, "title": title, "url": url, "id": sheet_id}
     except Exception as e:
-        print(f"Sheets error: {e}", file=sys.stderr)
         return {"error": str(e)}
 
 def create_google_slide(title):
@@ -155,7 +355,6 @@ def create_google_slide(title):
         url = f"https://docs.google.com/presentation/d/{pres_id}/edit"
         return {"success": True, "title": title, "url": url, "id": pres_id}
     except Exception as e:
-        print(f"Slides error: {e}", file=sys.stderr)
         return {"error": str(e)}
 
 def search_drive(query):
@@ -176,7 +375,6 @@ def search_drive(query):
         files = results.get('files', [])
         return {"success": True, "files": files, "count": len(files)}
     except Exception as e:
-        print(f"Drive error: {e}", file=sys.stderr)
         return {"error": str(e)}
 
 def list_gmail(query="is:unread", max_results=5):
@@ -184,11 +382,10 @@ def list_gmail(query="is:unread", max_results=5):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー - Google認証に失敗しました"}
+            return {"error": "認証エラー"}
         
         gmail_service = build('gmail', 'v1', credentials=creds)
         
-        # List messages
         results = gmail_service.users().messages().list(
             userId='me',
             q=query,
@@ -198,7 +395,7 @@ def list_gmail(query="is:unread", max_results=5):
         messages = results.get('messages', [])
         
         if not messages:
-            return {"success": True, "emails": [], "count": 0, "message": "メールが見つかりませんでした"}
+            return {"success": True, "emails": [], "count": 0}
         
         email_list = []
         
@@ -219,7 +416,7 @@ def list_gmail(query="is:unread", max_results=5):
                     'date': headers.get('Date', '')
                 })
             except Exception as e:
-                print(f"Error getting message {msg['id']}: {e}", file=sys.stderr)
+                print(f"Error getting message: {e}", file=sys.stderr)
                 continue
         
         return {"success": True, "emails": email_list, "count": len(email_list)}
@@ -227,8 +424,55 @@ def list_gmail(query="is:unread", max_results=5):
         print(f"Gmail error: {e}", file=sys.stderr)
         return {"error": f"Gmailエラー: {str(e)}"}
 
-# Tool definitions for Gemini
+# ============ Tool Definitions for Gemini ============
+
 TOOLS = [
+    {
+        "name": "calculate",
+        "description": "数学計算を正確に実行します。四則演算、べき乗、平方根、三角関数など対応。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "expression": {"type": "string", "description": "計算式（例: 123*456, sqrt(2), 2**10）"}
+            },
+            "required": ["expression"]
+        }
+    },
+    {
+        "name": "calculate_date",
+        "description": "日付の計算をします。今日の日付、N日後/前、曜日など。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "description": "today, add_days, subtract_days, days_until"},
+                "days": {"type": "integer", "description": "日数"},
+                "date_str": {"type": "string", "description": "日付 (YYYY-MM-DD形式)"}
+            },
+            "required": ["operation"]
+        }
+    },
+    {
+        "name": "search_and_read_pdf",
+        "description": "GoogleドライブからPDFを検索して内容を読み取ります",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索キーワード（ファイル名）"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "fetch_url",
+        "description": "WebページのURLから内容を取得します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "取得するURL"}
+            },
+            "required": ["url"]
+        }
+    },
     {
         "name": "create_google_doc",
         "description": "Googleドキュメントを新規作成します",
@@ -236,7 +480,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "ドキュメントのタイトル"},
-                "content": {"type": "string", "description": "ドキュメントの内容（省略可）"}
+                "content": {"type": "string", "description": "ドキュメントの内容"}
             },
             "required": ["title"]
         }
@@ -280,8 +524,8 @@ TOOLS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx, after:2024/01/01）"},
-                "max_results": {"type": "integer", "description": "取得件数（デフォルト5）"}
+                "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx）"},
+                "max_results": {"type": "integer", "description": "取得件数"}
             },
             "required": []
         }
@@ -290,9 +534,21 @@ TOOLS = [
 
 def execute_tool(tool_name, args):
     """Execute a tool and return result"""
-    print(f"Executing tool: {tool_name} with args: {args}", file=sys.stderr)
+    print(f"Executing: {tool_name}({args})", file=sys.stderr)
     
-    if tool_name == "create_google_doc":
+    if tool_name == "calculate":
+        return calculate(args.get("expression", ""))
+    elif tool_name == "calculate_date":
+        return calculate_date(
+            args.get("operation", "today"),
+            args.get("days", 0),
+            args.get("date_str")
+        )
+    elif tool_name == "search_and_read_pdf":
+        return search_and_read_pdf(args.get("query", ""))
+    elif tool_name == "fetch_url":
+        return fetch_url(args.get("url", ""))
+    elif tool_name == "create_google_doc":
         return create_google_doc(args.get("title", "新規ドキュメント"), args.get("content", ""))
     elif tool_name == "create_google_sheet":
         return create_google_sheet(args.get("title", "新規スプレッドシート"))
@@ -304,6 +560,54 @@ def execute_tool(tool_name, args):
         return list_gmail(args.get("query", "is:unread"), args.get("max_results", 5))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
+
+def format_tool_result(tool_name, result):
+    """Format tool result for user response"""
+    if result.get("error"):
+        return f"ごめんなさい、エラーが出ちゃいました...😢\n{result['error']}"
+    
+    if tool_name == "calculate":
+        return f"計算しました！✨\n\n{result['expression']} = **{result['result']}**"
+    
+    elif tool_name == "calculate_date":
+        if 'time' in result:
+            return f"今日は {result['date']}（{result['weekday']}）\n現在時刻: {result['time']}"
+        elif 'days' in result:
+            return f"{result['target']}まで **{result['days']}日** です！"
+        else:
+            return f"{result['date']}（{result['weekday']}）です！"
+    
+    elif tool_name == "search_and_read_pdf":
+        text = result.get('text', '')[:1000]
+        return f"PDF読み取りました！📄\n\nファイル: {result.get('filename', '')}\n\n---\n{text}"
+    
+    elif tool_name == "fetch_url":
+        content = result.get('content', '')[:500]
+        return f"Webページの内容を取得しました！🌐\n\n{content}..."
+    
+    elif tool_name in ["create_google_doc", "create_google_sheet", "create_google_slide"]:
+        return f"作成しました！✨\n\n📄 {result.get('title', '')}\n🔗 {result['url']}"
+    
+    elif tool_name == "search_drive":
+        files = result.get("files", [])
+        if not files:
+            return "検索しましたが、該当するファイルは見つかりませんでした〜"
+        response = f"ドライブを検索しました！{len(files)}件見つかりましたよ✨\n\n"
+        for f in files[:5]:
+            response += f"📁 {f['name']}\n   {f.get('webViewLink', '')}\n\n"
+        return response.strip()
+    
+    elif tool_name == "list_gmail":
+        emails = result.get("emails", [])
+        if not emails:
+            return "メールは見つかりませんでした〜"
+        response = f"メールを確認しました！{len(emails)}件ありますよ📧\n\n"
+        for e in emails[:5]:
+            from_addr = e['from'][:30] + '...' if len(e['from']) > 30 else e['from']
+            response += f"📩 {e['subject']}\n   From: {from_addr}\n\n"
+        return response.strip()
+    
+    return json.dumps(result, ensure_ascii=False)
 
 def get_gemini_response(user_id, user_message):
     """Get response from Gemini API with function calling and conversation history"""
@@ -321,36 +625,21 @@ def get_gemini_response(user_id, user_message):
     
     headers = {'Content-Type': 'application/json'}
     
-    # Build conversation contents with history
+    # Build conversation contents
     contents = []
+    contents.append({"role": "user", "parts": [{"text": SYSTEM_PROMPT}]})
+    contents.append({"role": "model", "parts": [{"text": "了解しました！"}]})
     
-    # Add system prompt as first message
-    contents.append({
-        "role": "user",
-        "parts": [{"text": SYSTEM_PROMPT}]
-    })
-    contents.append({
-        "role": "model",
-        "parts": [{"text": "了解しました！コトとして対応しますね。"}]
-    })
-    
-    # Add conversation history
     for msg in conversation_history[user_id]:
         contents.append({
             "role": msg["role"] if msg["role"] == "model" else "user",
             "parts": [{"text": msg["text"]}]
         })
     
-    # Build tools for Gemini
-    gemini_tools = [{"function_declarations": TOOLS}]
-    
     data = {
         "contents": contents,
-        "tools": gemini_tools,
-        "generationConfig": {
-            "temperature": 0.8,
-            "maxOutputTokens": 1024
-        }
+        "tools": [{"function_declarations": TOOLS}],
+        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1024}
     }
     
     req = urllib.request.Request(
@@ -372,99 +661,41 @@ def get_gemini_response(user_id, user_message):
             parts = content.get('parts', [])
             
             for part in parts:
-                # Check for function call
                 if 'functionCall' in part:
                     func_call = part['functionCall']
                     tool_name = func_call.get('name')
                     tool_args = func_call.get('args', {})
                     
-                    print(f"Tool call: {tool_name}({tool_args})", file=sys.stderr)
-                    
-                    # Execute the tool
                     tool_result = execute_tool(tool_name, tool_args)
-                    print(f"Tool result: {tool_result}", file=sys.stderr)
+                    response_text = format_tool_result(tool_name, tool_result)
                     
-                    # Format response
-                    response_text = ""
-                    if tool_result.get("success"):
-                        if "url" in tool_result:
-                            response_text = f"作成しました！✨\n\n📄 {tool_result.get('title', '')}\n🔗 {tool_result['url']}"
-                        elif "files" in tool_result:
-                            files = tool_result["files"]
-                            if not files:
-                                response_text = "検索しましたが、該当するファイルは見つかりませんでした〜"
-                            else:
-                                response_text = f"ドライブを検索しました！{len(files)}件見つかりましたよ✨\n\n"
-                                for f in files[:5]:
-                                    response_text += f"📁 {f['name']}\n   {f.get('webViewLink', '')}\n\n"
-                                response_text = response_text.strip()
-                        elif "emails" in tool_result:
-                            emails = tool_result["emails"]
-                            if not emails:
-                                response_text = "メールは見つかりませんでした〜"
-                            else:
-                                response_text = f"メールを確認しました！{len(emails)}件ありますよ📧\n\n"
-                                for e in emails[:5]:
-                                    from_addr = e['from'][:30] + '...' if len(e['from']) > 30 else e['from']
-                                    response_text += f"📩 {e['subject']}\n   From: {from_addr}\n\n"
-                                response_text = response_text.strip()
-                    else:
-                        error_msg = tool_result.get('error', '不明なエラー')
-                        response_text = f"ごめんなさい、エラーが出ちゃいました...😢\n{error_msg}"
-                    
-                    # Add response to history
                     conversation_history[user_id].append({"role": "model", "text": response_text})
                     return response_text
                 
-                # Regular text response
                 if 'text' in part:
                     response_text = part['text']
-                    # Add response to history
                     conversation_history[user_id].append({"role": "model", "text": response_text})
                     return response_text
             
             return 'ちょっとわからなかったです...もう少し詳しく教えてもらえますか？'
     
     except Exception as e:
-        print(f"Gemini API error: {e}", file=sys.stderr)
-        return f"ちょっとエラーが出ちゃいました...😢"
+        print(f"Gemini error: {e}", file=sys.stderr)
+        return "ちょっとエラーが出ちゃいました...😢"
 
 def verify_signature(body, signature):
-    """Verify LINE webhook signature"""
     if not LINE_CHANNEL_SECRET:
         return True
-    
-    hash = hmac.new(
-        LINE_CHANNEL_SECRET.encode('utf-8'),
-        body.encode('utf-8'),
-        hashlib.sha256
-    ).digest()
-    expected_signature = base64.b64encode(hash).decode('utf-8')
-    return hmac.compare_digest(signature, expected_signature)
+    hash = hmac.new(LINE_CHANNEL_SECRET.encode('utf-8'), body.encode('utf-8'), hashlib.sha256).digest()
+    return hmac.compare_digest(signature, base64.b64encode(hash).decode('utf-8'))
 
 def reply_message(reply_token, text):
-    """Send reply via LINE Messaging API"""
     url = 'https://api.line.me/v2/bot/message/reply'
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
-    }
-    
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'}
     if len(text) > 4500:
         text = text[:4500] + "..."
-    
-    data = {
-        'replyToken': reply_token,
-        'messages': [{'type': 'text', 'text': text}]
-    }
-    
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(data).encode('utf-8'),
-        headers=headers,
-        method='POST'
-    )
-    
+    data = {'replyToken': reply_token, 'messages': [{'type': 'text', 'text': text}]}
+    req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers, method='POST')
     try:
         with urllib.request.urlopen(req) as res:
             print(f"Reply sent: {res.status}", file=sys.stderr)
@@ -477,8 +708,6 @@ def health_check():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """LINE webhook endpoint"""
-    
     signature = request.headers.get('X-Line-Signature', '')
     body = request.get_data(as_text=True)
     
@@ -488,8 +717,7 @@ def webhook():
     try:
         data = json.loads(body)
         events = data.get('events', [])
-    except Exception as e:
-        print(f"JSON error: {e}", file=sys.stderr)
+    except:
         return 'OK', 200
     
     for event in events:
@@ -507,7 +735,6 @@ def webhook():
                 
                 print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
                 
-                # Get AI response with user_id for conversation history
                 ai_response = get_gemini_response(user_id, user_text)
                 
                 print(f"Koto: {ai_response[:100]}...", file=sys.stderr)
@@ -517,10 +744,9 @@ def webhook():
         
         elif event_type == 'follow':
             reply_token = event.get('replyToken')
-            # Clear history for new user
             conversation_history[user_id] = []
             if reply_token:
-                reply_message(reply_token, "あ、こんにちは！コトです😊\n\nドキュメント作ったり、メール確認したり、色々お手伝いできますよ〜！\n\n何かあったら気軽に言ってくださいね！")
+                reply_message(reply_token, "あ、こんにちは！コトです😊\n\n色々お手伝いできますよ〜！\n・ドキュメント作成\n・メール確認\n・計算\n・PDF読み取り\n\n気軽に言ってくださいね！")
     
     return 'OK', 200
 
