@@ -5,8 +5,7 @@
         "dockerfilePath": "Dockerfile"
     },
     "deploy": {
-        "startCommand": "functions-framework --target=process_chat_message --port=$PORT",
-        "healthcheckPath": "/",
-        "restartPolicyType": "ON_FAILURE"
+        "restartPolicyType": "ON_FAILURE",
+        "healthcheckPath": null
     }
 }
