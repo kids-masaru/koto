@@ -8,6 +8,7 @@ import base64
 import urllib.request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from collections import defaultdict
 
 app = Flask(__name__)
 
@@ -21,6 +22,11 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 # Google Workspace
 GOOGLE_SERVICE_ACCOUNT_KEY = os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY', '{}')
 GOOGLE_DELEGATED_USER = os.environ.get('GOOGLE_DELEGATED_USER', '')
+
+# Conversation history storage (in-memory, per user)
+# Format: {user_id: [{"role": "user/model", "text": "..."}]}
+conversation_history = defaultdict(list)
+MAX_HISTORY = 20  # Keep last 20 messages per user
 
 # Koto's personality - 20代後半の女性秘書
 SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
@@ -51,6 +57,11 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - Googleドライブの検索
 - Gmailの確認・要約
 - 一般的な質問への回答
+
+【重要】
+- ユーザーとの過去の会話を覚えています
+- 「それ」「あれ」「いいですよ」などの指示語は、直前の会話から文脈を理解して対応してください
+- わからない場合だけ確認してください
 
 ユーザーからの依頼に対して、必要なら確認を取りながら、てきぱきと対応してください。"""
 
@@ -87,13 +98,10 @@ def create_google_doc(title, content=""):
             return {"error": "認証エラー"}
         
         docs_service = build('docs', 'v1', credentials=creds)
-        drive_service = build('drive', 'v3', credentials=creds)
         
-        # Create document
         doc = docs_service.documents().create(body={'title': title}).execute()
         doc_id = doc.get('documentId')
         
-        # Add content if provided
         if content:
             requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
             docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
@@ -117,7 +125,6 @@ def create_google_sheet(title, data=None):
         result = sheets_service.spreadsheets().create(body=spreadsheet).execute()
         sheet_id = result.get('spreadsheetId')
         
-        # Add data if provided
         if data:
             sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
@@ -177,10 +184,11 @@ def list_gmail(query="is:unread", max_results=5):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "認証エラー - Google認証に失敗しました"}
         
         gmail_service = build('gmail', 'v1', credentials=creds)
         
+        # List messages
         results = gmail_service.users().messages().list(
             userId='me',
             q=query,
@@ -188,28 +196,36 @@ def list_gmail(query="is:unread", max_results=5):
         ).execute()
         
         messages = results.get('messages', [])
+        
+        if not messages:
+            return {"success": True, "emails": [], "count": 0, "message": "メールが見つかりませんでした"}
+        
         email_list = []
         
         for msg in messages[:max_results]:
-            msg_data = gmail_service.users().messages().get(
-                userId='me',
-                id=msg['id'],
-                format='metadata',
-                metadataHeaders=['Subject', 'From', 'Date']
-            ).execute()
-            
-            headers = {h['name']: h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
-            email_list.append({
-                'id': msg['id'],
-                'subject': headers.get('Subject', '(件名なし)'),
-                'from': headers.get('From', ''),
-                'date': headers.get('Date', '')
-            })
+            try:
+                msg_data = gmail_service.users().messages().get(
+                    userId='me',
+                    id=msg['id'],
+                    format='metadata',
+                    metadataHeaders=['Subject', 'From', 'Date']
+                ).execute()
+                
+                headers = {h['name']: h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
+                email_list.append({
+                    'id': msg['id'],
+                    'subject': headers.get('Subject', '(件名なし)'),
+                    'from': headers.get('From', ''),
+                    'date': headers.get('Date', '')
+                })
+            except Exception as e:
+                print(f"Error getting message {msg['id']}: {e}", file=sys.stderr)
+                continue
         
         return {"success": True, "emails": email_list, "count": len(email_list)}
     except Exception as e:
         print(f"Gmail error: {e}", file=sys.stderr)
-        return {"error": str(e)}
+        return {"error": f"Gmailエラー: {str(e)}"}
 
 # Tool definitions for Gemini
 TOOLS = [
@@ -260,11 +276,11 @@ TOOLS = [
     },
     {
         "name": "list_gmail",
-        "description": "Gmailのメールを確認します",
+        "description": "Gmailのメールを確認・検索します",
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx）"},
+                "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx, after:2024/01/01）"},
                 "max_results": {"type": "integer", "description": "取得件数（デフォルト5）"}
             },
             "required": []
@@ -274,6 +290,8 @@ TOOLS = [
 
 def execute_tool(tool_name, args):
     """Execute a tool and return result"""
+    print(f"Executing tool: {tool_name} with args: {args}", file=sys.stderr)
+    
     if tool_name == "create_google_doc":
         return create_google_doc(args.get("title", "新規ドキュメント"), args.get("content", ""))
     elif tool_name == "create_google_sheet":
@@ -287,24 +305,47 @@ def execute_tool(tool_name, args):
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
-def get_gemini_response(user_message):
-    """Get response from Gemini API with function calling"""
+def get_gemini_response(user_id, user_message):
+    """Get response from Gemini API with function calling and conversation history"""
     if not GEMINI_API_KEY:
         return "APIキーが設定されていません〜"
+    
+    # Add user message to history
+    conversation_history[user_id].append({"role": "user", "text": user_message})
+    
+    # Keep only last N messages
+    if len(conversation_history[user_id]) > MAX_HISTORY:
+        conversation_history[user_id] = conversation_history[user_id][-MAX_HISTORY:]
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     
     headers = {'Content-Type': 'application/json'}
     
+    # Build conversation contents with history
+    contents = []
+    
+    # Add system prompt as first message
+    contents.append({
+        "role": "user",
+        "parts": [{"text": SYSTEM_PROMPT}]
+    })
+    contents.append({
+        "role": "model",
+        "parts": [{"text": "了解しました！コトとして対応しますね。"}]
+    })
+    
+    # Add conversation history
+    for msg in conversation_history[user_id]:
+        contents.append({
+            "role": msg["role"] if msg["role"] == "model" else "user",
+            "parts": [{"text": msg["text"]}]
+        })
+    
     # Build tools for Gemini
-    gemini_tools = [{
-        "function_declarations": TOOLS
-    }]
+    gemini_tools = [{"function_declarations": TOOLS}]
     
     data = {
-        "contents": [
-            {"role": "user", "parts": [{"text": f"{SYSTEM_PROMPT}\n\nユーザー: {user_message}"}]}
-        ],
+        "contents": contents,
         "tools": gemini_tools,
         "generationConfig": {
             "temperature": 0.8,
@@ -320,7 +361,7 @@ def get_gemini_response(user_message):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=30) as res:
+        with urllib.request.urlopen(req, timeout=60) as res:
             result = json.loads(res.read().decode('utf-8'))
             candidates = result.get('candidates', [])
             
@@ -341,33 +382,46 @@ def get_gemini_response(user_message):
                     
                     # Execute the tool
                     tool_result = execute_tool(tool_name, tool_args)
+                    print(f"Tool result: {tool_result}", file=sys.stderr)
                     
                     # Format response
+                    response_text = ""
                     if tool_result.get("success"):
                         if "url" in tool_result:
-                            return f"作成しました！✨\n\n📄 {tool_result.get('title', '')}\n🔗 {tool_result['url']}"
+                            response_text = f"作成しました！✨\n\n📄 {tool_result.get('title', '')}\n🔗 {tool_result['url']}"
                         elif "files" in tool_result:
                             files = tool_result["files"]
                             if not files:
-                                return "検索しましたが、該当するファイルは見つかりませんでした〜"
-                            response = f"ドライブを検索しました！{len(files)}件見つかりましたよ✨\n\n"
-                            for f in files[:5]:
-                                response += f"📁 {f['name']}\n   {f.get('webViewLink', '')}\n\n"
-                            return response.strip()
+                                response_text = "検索しましたが、該当するファイルは見つかりませんでした〜"
+                            else:
+                                response_text = f"ドライブを検索しました！{len(files)}件見つかりましたよ✨\n\n"
+                                for f in files[:5]:
+                                    response_text += f"📁 {f['name']}\n   {f.get('webViewLink', '')}\n\n"
+                                response_text = response_text.strip()
                         elif "emails" in tool_result:
                             emails = tool_result["emails"]
                             if not emails:
-                                return "メールは見つかりませんでした〜"
-                            response = f"メールを確認しました！{len(emails)}件ありますよ📧\n\n"
-                            for e in emails[:5]:
-                                response += f"📩 {e['subject']}\n   From: {e['from'][:40]}...\n\n"
-                            return response.strip()
+                                response_text = "メールは見つかりませんでした〜"
+                            else:
+                                response_text = f"メールを確認しました！{len(emails)}件ありますよ📧\n\n"
+                                for e in emails[:5]:
+                                    from_addr = e['from'][:30] + '...' if len(e['from']) > 30 else e['from']
+                                    response_text += f"📩 {e['subject']}\n   From: {from_addr}\n\n"
+                                response_text = response_text.strip()
                     else:
-                        return f"ごめんなさい、エラーが出ちゃいました...😢\n{tool_result.get('error', '')}"
+                        error_msg = tool_result.get('error', '不明なエラー')
+                        response_text = f"ごめんなさい、エラーが出ちゃいました...😢\n{error_msg}"
+                    
+                    # Add response to history
+                    conversation_history[user_id].append({"role": "model", "text": response_text})
+                    return response_text
                 
                 # Regular text response
                 if 'text' in part:
-                    return part['text']
+                    response_text = part['text']
+                    # Add response to history
+                    conversation_history[user_id].append({"role": "model", "text": response_text})
+                    return response_text
             
             return 'ちょっとわからなかったです...もう少し詳しく教えてもらえますか？'
     
@@ -440,6 +494,8 @@ def webhook():
     
     for event in events:
         event_type = event.get('type')
+        source = event.get('source', {})
+        user_id = source.get('userId', 'unknown')
         
         if event_type == 'message':
             message = event.get('message', {})
@@ -449,9 +505,10 @@ def webhook():
                 user_text = message.get('text', '')
                 reply_token = event.get('replyToken')
                 
-                print(f"User: {user_text}", file=sys.stderr)
+                print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
                 
-                ai_response = get_gemini_response(user_text)
+                # Get AI response with user_id for conversation history
+                ai_response = get_gemini_response(user_id, user_text)
                 
                 print(f"Koto: {ai_response[:100]}...", file=sys.stderr)
                 
@@ -460,6 +517,8 @@ def webhook():
         
         elif event_type == 'follow':
             reply_token = event.get('replyToken')
+            # Clear history for new user
+            conversation_history[user_id] = []
             if reply_token:
                 reply_message(reply_token, "あ、こんにちは！コトです😊\n\nドキュメント作ったり、メール確認したり、色々お手伝いできますよ〜！\n\n何かあったら気軽に言ってくださいね！")
     
