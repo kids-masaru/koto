@@ -40,7 +40,7 @@ def get_gemini_response(user_message):
     if not GEMINI_API_KEY:
         return "Gemini API キーが設定されていません。"
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
     
     headers = {
         'Content-Type': 'application/json'
