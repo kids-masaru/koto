@@ -165,6 +165,14 @@ def get_gemini_response(user_id, user_message):
             content = candidates[0].get('content', {})
             parts = content.get('parts', [])
             
+            # Debug: ログにレスポンス構造を出力
+            print(f"[DEBUG] Gemini response parts: {len(parts)}", file=sys.stderr)
+            for i, part in enumerate(parts):
+                part_keys = list(part.keys())
+                print(f"[DEBUG] Part {i}: keys={part_keys}", file=sys.stderr)
+                if 'functionCall' in part:
+                    print(f"[DEBUG] FunctionCall: {part['functionCall']}", file=sys.stderr)
+            
             for part in parts:
                 if 'functionCall' in part:
                     func_call = part['functionCall']
