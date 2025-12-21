@@ -173,18 +173,23 @@ def get_gemini_response(user_id, user_message):
                 if 'functionCall' in part:
                     print(f"[DEBUG] FunctionCall: {part['functionCall']}", file=sys.stderr)
             
+            # まずfunctionCallを探す（優先）
             for part in parts:
                 if 'functionCall' in part:
                     func_call = part['functionCall']
                     tool_name = func_call.get('name')
                     tool_args = func_call.get('args', {})
                     
+                    print(f"[DEBUG] Executing tool: {tool_name}", file=sys.stderr)
                     tool_result = execute_tool(tool_name, tool_args)
+                    print(f"[DEBUG] Tool result: {tool_result}", file=sys.stderr)
                     response_text = format_tool_result(tool_name, tool_result)
                     
                     add_message(user_id, "model", response_text)
                     return response_text
-                
+            
+            # functionCallがなければtextを返す
+            for part in parts:
                 if 'text' in part:
                     response_text = part['text']
                     add_message(user_id, "model", response_text)
