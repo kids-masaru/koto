@@ -13,12 +13,13 @@ def move_to_shared_folder(file_id):
     """
     folder_id = get_shared_folder_id()
     if not folder_id:
-        return  # No shared folder configured, skip
+        print("Warning: GOOGLE_DRIVE_FOLDER_ID not set. File will be in Service Account's root.", file=sys.stderr)
+        return {"success": True, "note": "Shared folder not configured"}
     
     try:
         creds = get_google_credentials()
         if not creds:
-            return
+            return {"success": False, "error": "Credential error during move"}
         
         drive_service = build('drive', 'v3', credentials=creds)
         
@@ -35,8 +36,10 @@ def move_to_shared_folder(file_id):
         ).execute()
         
         print(f"Moved file {file_id} to shared folder {folder_id}", file=sys.stderr)
+        return {"success": True}
     except Exception as e:
         print(f"Error moving to shared folder: {e}", file=sys.stderr)
+        return {"success": False, "error": str(e)}
 
 
 def create_google_doc(title, content=""):
@@ -44,7 +47,7 @@ def create_google_doc(title, content=""):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
         docs_service = build('docs', 'v1', credentials=creds)
         
@@ -56,13 +59,16 @@ def create_google_doc(title, content=""):
             docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
         
         # Move to shared folder
-        move_to_shared_folder(doc_id)
+        move_result = move_to_shared_folder(doc_id)
+        note = ""
+        if not move_result["success"]:
+            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
         
         url = f"https://docs.google.com/document/d/{doc_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": doc_id}
+        return {"success": True, "title": title, "url": url, "id": doc_id, "note": note}
     except Exception as e:
         print(f"Docs error: {e}", file=sys.stderr)
-        return {"error": str(e)}
+        return {"error": f"ドキュメント作成中にエラーが発生しました: {str(e)}"}
 
 
 def create_google_sheet(title, data=None):
@@ -70,7 +76,7 @@ def create_google_sheet(title, data=None):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
         sheets_service = build('sheets', 'v4', credentials=creds)
         
@@ -87,12 +93,15 @@ def create_google_sheet(title, data=None):
             ).execute()
         
         # Move to shared folder
-        move_to_shared_folder(sheet_id)
+        move_result = move_to_shared_folder(sheet_id)
+        note = ""
+        if not move_result["success"]:
+            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
         
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": sheet_id}
+        return {"success": True, "title": title, "url": url, "id": sheet_id, "note": note}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"スプレッドシート作成中にエラーが発生しました: {str(e)}"}
 
 
 def create_google_slide(title):
@@ -100,7 +109,7 @@ def create_google_slide(title):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
         slides_service = build('slides', 'v1', credentials=creds)
         
@@ -109,12 +118,15 @@ def create_google_slide(title):
         pres_id = result.get('presentationId')
         
         # Move to shared folder
-        move_to_shared_folder(pres_id)
+        move_result = move_to_shared_folder(pres_id)
+        note = ""
+        if not move_result["success"]:
+            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
         
         url = f"https://docs.google.com/presentation/d/{pres_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": pres_id}
+        return {"success": True, "title": title, "url": url, "id": pres_id, "note": note}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"スライド作成中にエラーが発生しました: {str(e)}"}
 
 
 def search_drive(query):
@@ -122,12 +134,15 @@ def search_drive(query):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "Google認証に失敗しました。"}
         
         drive_service = build('drive', 'v3', credentials=creds)
         
+        # Escape single quotes in query to prevent syntax errors
+        safe_query = query.replace("'", "\\'")
+        
         results = drive_service.files().list(
-            q=f"name contains '{query}' and trashed=false",
+            q=f"name contains '{safe_query}' and trashed=false",
             pageSize=10,
             fields="files(id, name, mimeType, webViewLink, modifiedTime)"
         ).execute()
@@ -135,7 +150,7 @@ def search_drive(query):
         files = results.get('files', [])
         return {"success": True, "files": files, "count": len(files)}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"検索中にエラーが発生しました: {str(e)}"}
 
 
 def list_gmail(query="is:unread", max_results=5):
@@ -143,7 +158,7 @@ def list_gmail(query="is:unread", max_results=5):
     try:
         creds = get_google_credentials()
         if not creds:
-            return {"error": "認証エラー"}
+            return {"error": "Google認証に失敗しました。"}
         
         gmail_service = build('gmail', 'v1', credentials=creds)
         
@@ -183,4 +198,4 @@ def list_gmail(query="is:unread", max_results=5):
         return {"success": True, "emails": email_list, "count": len(email_list)}
     except Exception as e:
         print(f"Gmail error: {e}", file=sys.stderr)
-        return {"error": f"Gmailエラー: {str(e)}"}
+        return {"error": f"Gmail操作中にエラーが発生しました: {str(e)}"}

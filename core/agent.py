@@ -59,7 +59,11 @@ def execute_tool(tool_name, args):
 def format_tool_result(tool_name, result):
     """Format tool result for user-friendly response"""
     if result.get("error"):
-        return f"ごめんなさい、エラーが出ちゃいました...😢\n{result['error']}"
+        error_msg = result['error']
+        return f"ごめんなさい、エラーが出ちゃいました...😢\n{error_msg}\n\n(※もう一度試すか、言い方を変えてみてください)"
+    
+    # Check for execution warnings/notes (e.g. shared folder move failure)
+    note = result.get("note", "")
     
     if tool_name == "calculate":
         return f"計算しました！✨\n\n{result['expression']} = **{result['result']}**"
@@ -91,7 +95,7 @@ def format_tool_result(tool_name, result):
         return f"Webページの内容を取得しました！🌐\n\n{content}..."
     
     elif tool_name in ["create_google_doc", "create_google_sheet", "create_google_slide"]:
-        return f"作成しました！✨\n\n📄 {result.get('title', '')}\n🔗 {result['url']}"
+        return f"作成しました！✨\n\n📄 {result.get('title', '')}\n🔗 {result['url']}{note}"
     
     elif tool_name == "search_drive":
         files = result.get("files", [])
