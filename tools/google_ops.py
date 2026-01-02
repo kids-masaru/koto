@@ -23,8 +23,12 @@ def move_to_shared_folder(file_id):
         
         drive_service = build('drive', 'v3', credentials=creds)
         
-        # Get current parents
-        file = drive_service.files().get(fileId=file_id, fields='parents').execute()
+        # Get current parents (supportsAllDrives=True needed for Shared Drives)
+        file = drive_service.files().get(
+            fileId=file_id, 
+            fields='parents',
+            supportsAllDrives=True
+        ).execute()
         previous_parents = ",".join(file.get('parents', []))
         
         # Move to shared folder
@@ -32,7 +36,8 @@ def move_to_shared_folder(file_id):
             fileId=file_id,
             addParents=folder_id,
             removeParents=previous_parents,
-            fields='id, parents'
+            fields='id, parents',
+            supportsAllDrives=True
         ).execute()
         
         print(f"Moved file {file_id} to shared folder {folder_id}", file=sys.stderr)
@@ -43,47 +48,73 @@ def move_to_shared_folder(file_id):
 
 
 def create_google_doc(title, content=""):
-    """Create a Google Doc and move it to shared folder"""
+    """Create a Google Doc directly in the shared folder"""
     try:
         creds = get_google_credentials()
         if not creds:
             return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
+        drive_service = build('drive', 'v3', credentials=creds)
         docs_service = build('docs', 'v1', credentials=creds)
         
-        doc = docs_service.documents().create(body={'title': title}).execute()
-        doc_id = doc.get('documentId')
+        folder_id = get_shared_folder_id()
+        file_metadata = {
+            'name': title,
+            'mimeType': 'application/vnd.google-apps.document'
+        }
         
+        # If shared folder is set, create directly inside it
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+        
+        # 1. Create file using Drive API
+        file = drive_service.files().create(
+            body=file_metadata,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
+        doc_id = file.get('id')
+        
+        # 2. Insert content using Docs API
         if content:
             requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
             docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
         
-        # Move to shared folder
-        move_result = move_to_shared_folder(doc_id)
-        note = ""
-        if not move_result["success"]:
-            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
-        
         url = f"https://docs.google.com/document/d/{doc_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": doc_id, "note": note}
+        return {"success": True, "title": title, "url": url, "id": doc_id}
     except Exception as e:
         print(f"Docs error: {e}", file=sys.stderr)
         return {"error": f"ドキュメント作成中にエラーが発生しました: {str(e)}"}
 
 
 def create_google_sheet(title, data=None):
-    """Create a Google Sheet and move it to shared folder"""
+    """Create a Google Sheet directly in the shared folder"""
     try:
         creds = get_google_credentials()
         if not creds:
             return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
+        drive_service = build('drive', 'v3', credentials=creds)
         sheets_service = build('sheets', 'v4', credentials=creds)
         
-        spreadsheet = {'properties': {'title': title}}
-        result = sheets_service.spreadsheets().create(body=spreadsheet).execute()
-        sheet_id = result.get('spreadsheetId')
+        folder_id = get_shared_folder_id()
+        file_metadata = {
+            'name': title,
+            'mimeType': 'application/vnd.google-apps.spreadsheet'
+        }
         
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+            
+        # 1. Create using Drive API
+        file = drive_service.files().create(
+            body=file_metadata,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
+        sheet_id = file.get('id')
+        
+        # 2. Update content using Sheets API
         if data:
             sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
@@ -92,39 +123,39 @@ def create_google_sheet(title, data=None):
                 body={'values': data}
             ).execute()
         
-        # Move to shared folder
-        move_result = move_to_shared_folder(sheet_id)
-        note = ""
-        if not move_result["success"]:
-            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
-        
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": sheet_id, "note": note}
+        return {"success": True, "title": title, "url": url, "id": sheet_id}
     except Exception as e:
         return {"error": f"スプレッドシート作成中にエラーが発生しました: {str(e)}"}
 
 
 def create_google_slide(title):
-    """Create a Google Slides presentation and move it to shared folder"""
+    """Create a Google Slides presentation directly in the shared folder"""
     try:
         creds = get_google_credentials()
         if not creds:
             return {"error": "Google認証に失敗しました。環境変数を確認してください。"}
         
-        slides_service = build('slides', 'v1', credentials=creds)
+        drive_service = build('drive', 'v3', credentials=creds)
         
-        presentation = {'title': title}
-        result = slides_service.presentations().create(body=presentation).execute()
-        pres_id = result.get('presentationId')
+        folder_id = get_shared_folder_id()
+        file_metadata = {
+            'name': title,
+            'mimeType': 'application/vnd.google-apps.presentation'
+        }
         
-        # Move to shared folder
-        move_result = move_to_shared_folder(pres_id)
-        note = ""
-        if not move_result["success"]:
-            note = f"\n(※注意: 共有フォルダへの移動に失敗しました: {move_result.get('error')})"
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+            
+        file = drive_service.files().create(
+            body=file_metadata,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
+        pres_id = file.get('id')
         
         url = f"https://docs.google.com/presentation/d/{pres_id}/edit"
-        return {"success": True, "title": title, "url": url, "id": pres_id, "note": note}
+        return {"success": True, "title": title, "url": url, "id": pres_id}
     except Exception as e:
         return {"error": f"スライド作成中にエラーが発生しました: {str(e)}"}
 
@@ -141,10 +172,14 @@ def search_drive(query):
         # Escape single quotes in query to prevent syntax errors
         safe_query = query.replace("'", "\\'")
         
+        # Search includes Shared Drives
         results = drive_service.files().list(
             q=f"name contains '{safe_query}' and trashed=false",
             pageSize=10,
-            fields="files(id, name, mimeType, webViewLink, modifiedTime)"
+            fields="files(id, name, mimeType, webViewLink, modifiedTime)",
+            corpora='allDrives',
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
         ).execute()
         
         files = results.get('files', [])
