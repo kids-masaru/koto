@@ -6,24 +6,28 @@ import urllib.request
 import sys
 
 try:
-    from googlesearch import search as google_search
+    from duckduckgo_search import DDGS
     SEARCH_AVAILABLE = True
 except ImportError:
     SEARCH_AVAILABLE = False
-    print("googlesearch-python not available", file=sys.stderr)
+    print("duckduckgo-search not available", file=sys.stderr)
 
 
 def google_web_search(query, num_results=5):
     """
-    Execute Google search and return top URLs
-    Uses googlesearch-python library
+    Execute Web search and return top URLs
+    Uses duckduckgo-search library (more reliable for free use)
     """
     try:
         if not SEARCH_AVAILABLE:
-            return {"error": "Google検索機能が利用できません（googlesearch-pythonをインストールしてください）"}
+            return {"error": "検索機能が利用できません（duckduckgo-searchをインストールしてください）"}
         
         # Execute search
-        urls = list(google_search(query, num_results=num_results, lang="ja"))
+        urls = []
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=num_results))
+            for r in results:
+                urls.append(r['href'])
         
         if not urls:
             return {"success": True, "query": query, "urls": [], "message": "検索結果が見つかりませんでした"}
