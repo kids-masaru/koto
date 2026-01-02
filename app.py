@@ -11,6 +11,9 @@ import base64
 import urllib.request
 import threading
 from flask import Flask, request
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -23,7 +23,7 @@ def google_web_search(query, num_results=5):
             return {"error": "検索機能が利用できません（duckduckgo-searchをインストールしてください）"}
         
         # Execute search
-        urls = []
+        search_results = []
         with DDGS() as ddgs:
             # 1. Try default 'text' backend
             try:
@@ -31,35 +31,34 @@ def google_web_search(query, num_results=5):
             except Exception:
                 results = []
             
-            # 2. Key Error or Empty? Try 'html' backend
+            # 2. Backups (html/lite)
             if not results:
-                print("DDG 'text' backend failed/empty, trying 'html'...", file=sys.stderr)
                 try:
                     results = list(ddgs.html(query, max_results=num_results))
                 except Exception:
                     results = []
-
-            # 3. Still empty? Try 'lite' backend
+            
             if not results:
-                print("DDG 'html' backend failed/empty, trying 'lite'...", file=sys.stderr)
                 try:
                     results = list(ddgs.lite(query, max_results=num_results))
                 except Exception:
                     results = []
 
             for r in results:
-                # Normalizing keys (some backends use 'href', some might differ but DDGS standardizes usually)
-                if 'href' in r:
-                    urls.append(r['href'])
+                search_results.append({
+                    "title": r.get('title', 'No Title'),
+                    "url": r.get('href', ''),
+                    "snippet": r.get('body', '') or r.get('snippet', '')
+                })
         
-        if not urls:
-            return {"success": True, "query": query, "urls": [], "message": "検索結果が見つかりませんでした"}
+        if not search_results:
+            return {"success": True, "query": query, "results": [], "message": "検索結果が見つかりませんでした"}
         
         return {
             "success": True,
             "query": query,
-            "urls": urls,
-            "count": len(urls)
+            "results": search_results,
+            "count": len(search_results)
         }
     except Exception as e:
         print(f"Search error: {e}", file=sys.stderr)

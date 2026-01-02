@@ -159,47 +159,66 @@ def get_gemini_response(user_id, user_message):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=60) as res:
-            result = json.loads(res.read().decode('utf-8'))
-            candidates = result.get('candidates', [])
-            
-            if not candidates:
-                return 'ちょっと調子悪いみたいです...もう一度試してもらえますか？'
-            
-            content = candidates[0].get('content', {})
-            parts = content.get('parts', [])
-            
-            # Debug: ログにレスポンス構造を出力
-            print(f"[DEBUG] Gemini response parts: {len(parts)}", file=sys.stderr)
-            for i, part in enumerate(parts):
-                part_keys = list(part.keys())
-                print(f"[DEBUG] Part {i}: keys={part_keys}", file=sys.stderr)
-                if 'functionCall' in part:
-                    print(f"[DEBUG] FunctionCall: {part['functionCall']}", file=sys.stderr)
-            
-            # まずfunctionCallを探す（優先）
-            for part in parts:
-                if 'functionCall' in part:
-                    func_call = part['functionCall']
-                    tool_name = func_call.get('name')
-                    tool_args = func_call.get('args', {})
+            # Agent Loop: Handle multiple tool calls
+            max_turns = 5
+            for turn in range(max_turns):
+                with urllib.request.urlopen(req, timeout=60) as res:
+                    result = json.loads(res.read().decode('utf-8'))
+                    candidates = result.get('candidates', [])
                     
-                    print(f"[DEBUG] Executing tool: {tool_name}", file=sys.stderr)
-                    tool_result = execute_tool(tool_name, tool_args)
-                    print(f"[DEBUG] Tool result: {tool_result}", file=sys.stderr)
-                    response_text = format_tool_result(tool_name, tool_result)
+                    if not candidates:
+                        return 'ちょっと調子悪いみたいです...もう一度試してもらえますか？'
                     
-                    add_message(user_id, "model", response_text)
-                    return response_text
+                    content = candidates[0].get('content', {})
+                    parts = content.get('parts', [])
+                    
+                    # If model returns text, return it (End of turn)
+                    for part in parts:
+                        if 'text' in part:
+                            response_text = part['text']
+                            add_message(user_id, "model", response_text)
+                            return response_text
+                    
+                    # If model returns functionCall, execute and continue loop
+                    function_call_part = next((p for p in parts if 'functionCall' in p), None)
+                    if function_call_part:
+                        func_call = function_call_part['functionCall']
+                        tool_name = func_call.get('name')
+                        tool_args = func_call.get('args', {})
+                        
+                        print(f"[DEBUG] Executing tool: {tool_name}", file=sys.stderr)
+                        tool_result = execute_tool(tool_name, tool_args)
+                        
+                        # Add function call and response to history (contents) for next request
+                        # Note: Gemini API expects the full history including the function call it just made
+                        # We need to append the model's function call, then the user's function response
+                        
+                        contents.append({
+                            "role": "model",
+                            "parts": [function_call_part]
+                        })
+                        
+                        contents.append({
+                            "role": "function",
+                            "parts": [{
+                                "functionResponse": {
+                                    "name": tool_name,
+                                    "response": {"result": tool_result}
+                                }
+                            }]
+                        })
+                        
+                        # Update request data with new history
+                        data["contents"] = contents
+                        req = urllib.request.Request(
+                            url,
+                            data=json.dumps(data).encode('utf-8'),
+                            headers=headers,
+                            method='POST'
+                        )
+                        continue # Loop to call API again with tool result
             
-            # functionCallがなければtextを返す
-            for part in parts:
-                if 'text' in part:
-                    response_text = part['text']
-                    add_message(user_id, "model", response_text)
-                    return response_text
-            
-            return 'ちょっとわからなかったです...もう少し詳しく教えてもらえますか？'
+            return '考えがまとまりませんでした...もう一度聞いてください。'
     
     except Exception as e:
         print(f"Gemini error: {e}", file=sys.stderr)

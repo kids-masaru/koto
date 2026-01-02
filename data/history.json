@@ -1,1 +1,24 @@
-{}
+{
+  "local_debug_user": [
+    {
+      "role": "user",
+      "text": "福岡の天気について調べて",
+      "timestamp": "2026-01-02T10:39:56.462209"
+    },
+    {
+      "role": "model",
+      "text": "「福岡 天気」で検索しました！🔍\n\n1. https://tenki.jp/forecast/9/43/8210/40130/1hour.html\n2. https://weathernews.jp/onebox/tenki/fukuoka/40130/\n3. https://weather.yahoo.co.jp/weather/jp/40/8210.html\n4. https://www.jma.go.jp/bosai/forecast/\n5. https://www.otenki.com/0001_tenki_pinpoint_city.htm?pref_code=40&pref_name=������\n\n詳しく見たいURLがあれば教えてくださいね！",
+      "timestamp": "2026-01-02T10:39:58.878497"
+    },
+    {
+      "role": "user",
+      "text": "福岡の天気について調べて",
+      "timestamp": "2026-01-02T15:33:10.523402"
+    },
+    {
+      "role": "model",
+      "text": "福岡の天気について、再度検索しますね！\n\n",
+      "timestamp": "2026-01-02T15:33:11.656452"
+    }
+  ]
+}

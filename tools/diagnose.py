@@ -6,8 +6,12 @@ import os
 import sys
 import json
 import urllib.request
+from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -77,7 +81,11 @@ def check_drive_access():
         folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID')
         if folder_id:
             try:
-                folder = service.files().get(fileId=folder_id).execute()
+                # supportsAllDrives=True is required for Shared Drives
+                folder = service.files().get(
+                    fileId=folder_id,
+                    supportsAllDrives=True
+                ).execute()
                 print(f"✅ Shared Folder Access: OK (Name: {folder.get('name')})")
             except Exception as e:
                 print(f"❌ Shared Folder Access Error: {e}")
