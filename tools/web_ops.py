@@ -25,9 +25,32 @@ def google_web_search(query, num_results=5):
         # Execute search
         urls = []
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=num_results))
+            # 1. Try default 'text' backend
+            try:
+                results = list(ddgs.text(query, max_results=num_results))
+            except Exception:
+                results = []
+            
+            # 2. Key Error or Empty? Try 'html' backend
+            if not results:
+                print("DDG 'text' backend failed/empty, trying 'html'...", file=sys.stderr)
+                try:
+                    results = list(ddgs.html(query, max_results=num_results))
+                except Exception:
+                    results = []
+
+            # 3. Still empty? Try 'lite' backend
+            if not results:
+                print("DDG 'html' backend failed/empty, trying 'lite'...", file=sys.stderr)
+                try:
+                    results = list(ddgs.lite(query, max_results=num_results))
+                except Exception:
+                    results = []
+
             for r in results:
-                urls.append(r['href'])
+                # Normalizing keys (some backends use 'href', some might differ but DDGS standardizes usually)
+                if 'href' in r:
+                    urls.append(r['href'])
         
         if not urls:
             return {"success": True, "query": query, "urls": [], "message": "検索結果が見つかりませんでした"}
