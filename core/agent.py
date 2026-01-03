@@ -136,8 +136,15 @@ def get_gemini_response(user_id, user_message):
     
     # Build conversation contents
     contents = []
+    
+    # Inject System Prompt
+    # To avoid "User, User" sequence, we merge System Prompt into the very first message
+    # OR we use the "system_instruction" feature if available (v1beta supports it but via different field)
+    # For compatibility/simplicity, we'll keep the separate turn but make the model's ack invisible/internal-only logical.
+    # However, to prevent "Lazy Okay", we'll instruct it strictly in the prompt.
+    
     contents.append({"role": "user", "parts": [{"text": SYSTEM_PROMPT}]})
-    contents.append({"role": "model", "parts": [{"text": "了解しました！"}]})
+    contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
     
     for msg in history:
         contents.append({
