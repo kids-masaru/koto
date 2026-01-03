@@ -13,18 +13,7 @@ except ImportError:
     print("duckduckgo-search not available", file=sys.stderr)
 
 
-        if not search_results:
-            return {"success": True, "query": query, "results": [], "message": "検索結果が見つかりませんでした"}
-        
-        return {
-            "success": True,
-            "query": query,
-            "results": search_results,
-            "count": len(search_results)
-        }
-    except Exception as e:
-        print(f"Search error: {e}", file=sys.stderr)
-        return {"error": f"検索エラー: {str(e)}"}
+
 
 
 def _google_custom_search(query, api_key, cse_id, num_results=3):
