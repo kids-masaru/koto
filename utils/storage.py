@@ -57,8 +57,11 @@ def save_all_history():
     try:
         with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(dict(_history_cache), f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        # Vercel is read-only. Log warning but don't crash or spam errors.
+        print(f"Warning: History save skipped (Read-only FS): {e}", file=sys.stderr)
     except Exception as e:
-        print(f"Error saving history: {e}")
+        print(f"Error saving history: {e}", file=sys.stderr)
 
 
 def get_user_history(user_id):
