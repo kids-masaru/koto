@@ -224,7 +224,8 @@ def list_gmail(query="is:unread", max_results=5):
                     'id': msg['id'],
                     'subject': headers.get('Subject', '(件名なし)'),
                     'from': headers.get('From', ''),
-                    'date': headers.get('Date', '')
+                    'date': headers.get('Date', ''),
+                    'snippet': msg_data.get('snippet', '')
                 })
             except Exception as e:
                 print(f"Error getting message: {e}", file=sys.stderr)

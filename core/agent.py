@@ -178,6 +178,7 @@ def get_gemini_response(user_id, user_message):
                     
                     content = candidates[0].get('content', {})
                     parts = content.get('parts', [])
+                    print(f"[DEBUG] Model Response Parts: {parts}", file=sys.stderr)
                     
                     # 1. Check for functionCall (Prioritize over text for loop)
                     function_call_part = next((p for p in parts if 'functionCall' in p), None)
