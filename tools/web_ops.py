@@ -24,26 +24,22 @@ def google_web_search(query, num_results=3):
         
         # Execute search
         search_results = []
-        # Set timeout to avoid Reply Token expiration (Line limits 30s)
+        # Set timeout to avoid Reply Token expiration
         with DDGS(timeout=5) as ddgs:
-            # 1. Try default 'text' backend with JP region
+            # 1. Try 'text' backend with JP region
             try:
                 results = list(ddgs.text(query, region='jp-jp', max_results=num_results))
-            except Exception:
+            except Exception as e:
+                print(f"DDG JP Search Error: {e}", file=sys.stderr)
                 results = []
             
-            # 2. Backups (html/lite)
+            # 2. If no results, try Global region (wt-wt)
             if not results:
                 try:
-                    results = list(ddgs.html(query, region='jp-jp', max_results=num_results))
-                except Exception:
-                    results = []
-            
-            if not results:
-                try:
-                    results = list(ddgs.lite(query, region='jp-jp', max_results=num_results))
+                    print("JP search empty, trying global...", file=sys.stderr)
+                    results = list(ddgs.text(query, region='wt-wt', max_results=num_results))
                 except Exception as e:
-                    print(f"DDG Search Error (lite): {e}", file=sys.stderr)
+                    print(f"DDG Global Search Error: {e}", file=sys.stderr)
                     results = []
 
             for r in results:
