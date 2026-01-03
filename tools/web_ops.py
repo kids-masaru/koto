@@ -42,7 +42,8 @@ def google_web_search(query, num_results=3):
             if not results:
                 try:
                     results = list(ddgs.lite(query, region='jp-jp', max_results=num_results))
-                except Exception:
+                except Exception as e:
+                    print(f"DDG Search Error (lite): {e}", file=sys.stderr)
                     results = []
 
             for r in results:
@@ -52,8 +53,15 @@ def google_web_search(query, num_results=3):
                     "snippet": r.get('body', '') or r.get('snippet', '')
                 })
         
+        # Fallback: If no results found (likely IP blocked), return a direct search URL
         if not search_results:
-            return {"success": True, "query": query, "results": [], "message": "検索結果が見つかりませんでした"}
+            print("Search returned 0 results. Using fallback URL.", file=sys.stderr)
+            search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+            search_results.append({
+                "title": f"Google検索: {query}",
+                "url": search_url,
+                "snippet": "検索結果をうまく読み取れませんでした。リンク先で直接確認してください。"
+            })
         
         return {
             "success": True,
