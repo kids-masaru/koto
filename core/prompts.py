@@ -183,5 +183,16 @@ TOOLS = [
             },
             "required": []
         }
+    },
+    {
+        "name": "set_reminder",
+        "description": "毎朝の天気・服装予報のリマインダーを設定します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "予報する地域名（例: 福岡市）"}
+            },
+            "required": ["location"]
+        }
     }
 ]

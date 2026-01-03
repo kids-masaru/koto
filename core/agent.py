@@ -13,7 +13,7 @@ from utils.storage import get_user_history, add_message
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 
-def execute_tool(tool_name, args):
+def execute_tool(tool_name, args, user_id=None):
     """Execute a tool and return result"""
     print(f"Executing: {tool_name}({args})", file=sys.stderr)
     
@@ -24,6 +24,7 @@ def execute_tool(tool_name, args):
         create_google_doc, create_google_sheet, create_google_slide,
         search_drive, list_gmail
     )
+    from utils.user_db import register_user
     
     if tool_name == "calculate":
         return calculate(args.get("expression", ""))
@@ -52,6 +53,10 @@ def execute_tool(tool_name, args):
         return search_drive(args.get("query", ""))
     elif tool_name == "list_gmail":
         return list_gmail(args.get("query", "is:unread"), args.get("max_results", 5))
+    elif tool_name == "set_reminder":
+        if not user_id:
+            return {"error": "ユーザーIDが取得できませんでした。"}
+        return register_user(user_id, args.get("location", ""))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -113,8 +118,12 @@ def format_tool_result(tool_name, result):
         response = f"メールを確認しました！{len(emails)}件ありますよ📧\n\n"
         for e in emails[:5]:
             from_addr = e['from'][:30] + '...' if len(e['from']) > 30 else e['from']
-            response += f"📩 {e['subject']}\n   From: {from_addr}\n\n"
+            snippet = e.get('snippet', '')[:50]
+            response += f"📩 {e['subject']}\n   From: {from_addr}\n   {snippet}...\n\n"
         return response.strip()
+
+    elif tool_name == "set_reminder":
+        return f"リマインダー設定しました！✨\n毎日朝7時頃に「{result.get('location', '')}」の天気と服装をお知らせしますね！☀️"
     
     return json.dumps(result, ensure_ascii=False)
 
@@ -188,7 +197,7 @@ def get_gemini_response(user_id, user_message):
                         tool_args = func_call.get('args', {})
                         
                         print(f"[DEBUG] Executing tool: {tool_name}", file=sys.stderr)
-                        tool_result = execute_tool(tool_name, tool_args)
+                        tool_result = execute_tool(tool_name, tool_args, user_id=user_id)
                         
                         # Add function call and response to history (contents) for next request
                         contents.append({

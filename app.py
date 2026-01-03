@@ -199,6 +199,43 @@ def webhook():
     # Return immediately - processing happens in background
     return 'OK', 200
 
+@app.route('/cron', methods=['GET'])
+def cron_job():
+    """Daily Cron Job - Send Morning Updates"""
+    # Verify Cron Secret
+    cron_secret = os.environ.get('CRON_SECRET')
+    auth_header = request.headers.get('Authorization')
+    
+    if cron_secret and (not auth_header or auth_header != f"Bearer {cron_secret}"):
+        return 'Unauthorized', 401
+    
+    from utils.user_db import get_active_users
+    
+    users = get_active_users()
+    print(f"Cron started. Users to notify: {len(users)}", file=sys.stderr)
+    
+    for user in users:
+        user_id = user['user_id']
+        location = user['location']
+        
+        # Simulate a user request to trigger Agent Logic (Search -> Summarize)
+        prompt = f"今日の{location}の天気と、それに合わせた服装のアドバイスを教えて！"
+        print(f"Generating report for {user_id[:8]} ({location})...", file=sys.stderr)
+        
+        try:
+            # Use get_gemini_response directly to leverage existing tool logic
+            response = get_gemini_response(user_id, prompt)
+            
+            # Add Morning Greeting
+            final_message = f"おはようございます！☀️\n{response}"
+            
+            push_message(user_id, final_message)
+            print(f"Sent morning report to {user_id[:8]}", file=sys.stderr)
+        except Exception as e:
+            print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
+            
+    return f'Processed {len(users)} users', 200
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
