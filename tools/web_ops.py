@@ -13,7 +13,7 @@ except ImportError:
     print("duckduckgo-search not available", file=sys.stderr)
 
 
-def google_web_search(query, num_results=5):
+def google_web_search(query, num_results=3):
     """
     Execute Web search and return top URLs
     Uses duckduckgo-search library (more reliable for free use)

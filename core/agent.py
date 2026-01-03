@@ -172,14 +172,7 @@ def get_gemini_response(user_id, user_message):
                     content = candidates[0].get('content', {})
                     parts = content.get('parts', [])
                     
-                    # If model returns text, return it (End of turn)
-                    for part in parts:
-                        if 'text' in part:
-                            response_text = part['text']
-                            add_message(user_id, "model", response_text)
-                            return response_text
-                    
-                    # If model returns functionCall, execute and continue loop
+                    # 1. Check for functionCall (Prioritize over text for loop)
                     function_call_part = next((p for p in parts if 'functionCall' in p), None)
                     if function_call_part:
                         func_call = function_call_part['functionCall']
@@ -190,9 +183,6 @@ def get_gemini_response(user_id, user_message):
                         tool_result = execute_tool(tool_name, tool_args)
                         
                         # Add function call and response to history (contents) for next request
-                        # Note: Gemini API expects the full history including the function call it just made
-                        # We need to append the model's function call, then the user's function response
-                        
                         contents.append({
                             "role": "model",
                             "parts": [function_call_part]
@@ -217,6 +207,13 @@ def get_gemini_response(user_id, user_message):
                             method='POST'
                         )
                         continue # Loop to call API again with tool result
+
+                    # 2. If no functionCall, return text (End of turn)
+                    for part in parts:
+                        if 'text' in part:
+                            response_text = part['text']
+                            add_message(user_id, "model", response_text)
+                            return response_text
             
             return '考えがまとまりませんでした...もう一度聞いてください。'
     

@@ -101,8 +101,8 @@ def reply_message(reply_token, text):
         print(f"Reply error: {e}", file=sys.stderr)
 
 
-def process_message_async(user_id, user_text):
-    """Process message in background and send response via Push API"""
+def process_message_async(user_id, user_text, reply_token=None):
+    """Process message in background and send response via Reply/Push API"""
     try:
         print(f"Processing message from {user_id[:8]}: {user_text}", file=sys.stderr)
         
@@ -110,10 +110,29 @@ def process_message_async(user_id, user_text):
         
         print(f"Koto response: {ai_response[:100]}...", file=sys.stderr)
         
-        push_message(user_id, ai_response)
+        # Try Reply API first (Free, but token expires in ~30s)
+        success = False
+        if reply_token:
+            try:
+                reply_message(reply_token, ai_response)
+                success = True
+            except Exception as e:
+                print(f"Reply failed (likely timeout), trying Push: {e}", file=sys.stderr)
+        
+        # Fallback to Push API (Quota limited)
+        if not success:
+            push_message(user_id, ai_response)
+            
     except Exception as e:
         print(f"Async processing error: {e}", file=sys.stderr)
-        push_message(user_id, "ごめんなさい、エラーが出ちゃいました...😢\nもう一度試してもらえますか？")
+        # Try to send error message
+        try:
+            if reply_token:
+                reply_message(reply_token, "ごめんなさい、エラーが出ちゃいました...😢\nもう一度試してもらえますか？")
+            else:
+                push_message(user_id, "ごめんなさい、エラーが出ちゃいました...😢\nもう一度試してもらえますか？")
+        except Exception:
+            pass
 
 
 @app.route('/', methods=['GET'])
@@ -148,15 +167,18 @@ def webhook():
             
             if message_type == 'text':
                 user_text = message.get('text', '')
+                reply_token = event.get('replyToken')
                 
                 print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
                 
-                # Process in background thread (async)
-                thread = threading.Thread(
-                    target=process_message_async,
-                    args=(user_id, user_text)
-                )
-                thread.start()
+            if message_type == 'text':
+                user_text = message.get('text', '')
+                reply_token = event.get('replyToken')
+                
+                print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
+                
+                # Process synchronously (Vercel/Serverless does not support background threads after response)
+                process_message_async(user_id, user_text, reply_token)
         
         elif event_type == 'follow':
             reply_token = event.get('replyToken')

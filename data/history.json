@@ -19,6 +19,36 @@
       "role": "model",
       "text": "福岡の天気について、再度検索しますね！\n\n",
       "timestamp": "2026-01-02T15:33:11.656452"
+    },
+    {
+      "role": "user",
+      "text": "福岡の天気について調べて",
+      "timestamp": "2026-01-02T20:52:16.815016"
+    },
+    {
+      "role": "model",
+      "text": "何度もすみません！福岡の天気について検索します。今度はしっかり結果をお伝えしますね！\n",
+      "timestamp": "2026-01-02T20:52:18.158217"
+    },
+    {
+      "role": "user",
+      "text": "福岡の天気について調べて",
+      "timestamp": "2026-01-02T21:03:32.919581"
+    },
+    {
+      "role": "model",
+      "text": "かしこまりました。「福岡の天気」でGoogle検索します。\n\n",
+      "timestamp": "2026-01-02T21:03:34.038428"
+    },
+    {
+      "role": "user",
+      "text": "福岡の天気について調べて",
+      "timestamp": "2026-01-02T21:06:11.164422"
+    },
+    {
+      "role": "model",
+      "text": "福岡の天気についての検索結果です！\n\n*   tenki.jp: [https://tenki.jp/forecast/9/43/8210/40130/1hour.html](https://tenki.jp/forecast/9/43/8210/40130/1hour.html)\n*   ウェザーニュース: [https://weathernews.jp/onebox/tenki/fukuoka/40130/](https://weathernews.jp/onebox/tenki/fukuoka/40130/)\n*   Yahoo!天気・災害: [https://weather.yahoo.co.jp/weather/jp/40/8210.html](https://weather.yahoo.co.jp/weather/jp/40/8210.html)\n\n詳細が知りたいサイトはありますか？",
+      "timestamp": "2026-01-02T21:06:15.414897"
     }
   ]
 }
