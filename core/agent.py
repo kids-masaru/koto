@@ -22,7 +22,7 @@ def execute_tool(tool_name, args, user_id=None):
     from tools.web_ops import google_web_search, fetch_url
     from tools.google_ops import (
         create_google_doc, create_google_sheet, create_google_slide,
-        search_drive, list_gmail
+        search_drive, list_gmail, get_gmail_body
     )
     from utils.user_db import register_user
     
@@ -53,6 +53,8 @@ def execute_tool(tool_name, args, user_id=None):
         return search_drive(args.get("query", ""))
     elif tool_name == "list_gmail":
         return list_gmail(args.get("query", "is:unread"), args.get("max_results", 5))
+    elif tool_name == "get_gmail_body":
+        return get_gmail_body(args.get("message_id", ""))
     elif tool_name == "set_reminder":
         if not user_id:
             return {"error": "ユーザーIDが取得できませんでした。"}
@@ -122,6 +124,12 @@ def format_tool_result(tool_name, result):
             response += f"📩 {e['subject']}\n   From: {from_addr}\n   {snippet}...\n\n"
         return response.strip()
 
+    elif tool_name == "get_gmail_body":
+        if result.get("error"):
+            return f"メール取得エラー: {result['error']}"
+        subject = result.get("subject", "(件名なし)")
+        body = result.get("body", "")[:500]
+        return f"📧 {subject}\n---\n{body}"
     elif tool_name == "set_reminder":
         return f"リマインダー設定しました！✨\n毎日朝7時頃に「{result.get('location', '')}」の天気と服装をお知らせしますね！☀️"
     
@@ -139,7 +147,7 @@ def get_gemini_response(user_id, user_message):
     # Get conversation history
     history = get_user_history(user_id)
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
     
     headers = {'Content-Type': 'application/json'}
     
