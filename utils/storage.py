@@ -3,6 +3,7 @@ Conversation history storage - JSON file based persistence
 """
 import json
 import os
+import sys
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
