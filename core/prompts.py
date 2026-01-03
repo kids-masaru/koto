@@ -173,17 +173,29 @@ TOOLS = [
         }
     },
     {
-        "name": "list_gmail",
-        "description": "Gmailのメールを確認・検索します",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx）"},
-                "max_results": {"type": "integer", "description": "取得件数"}
-            },
-            "required": []
-        }
-    },
+
+            "name": "list_gmail",
+            "description": "Gmailのメールを確認・検索します",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "検索クエリ（例: is:unread, from:xxx）"},
+                    "max_results": {"type": "integer", "description": "取得件数"}
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "get_gmail_body",
+            "description": "指定したメールIDの本文（プレーンテキスト）を取得します",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "取得したいメールのID"}
+                },
+                "required": ["message_id"]
+            }
+        },
     {
         "name": "set_reminder",
         "description": "毎朝の天気・服装予報のリマインダーを設定します",
