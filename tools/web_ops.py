@@ -24,23 +24,24 @@ def google_web_search(query, num_results=3):
         
         # Execute search
         search_results = []
-        with DDGS() as ddgs:
-            # 1. Try default 'text' backend
+        # Set timeout to avoid Reply Token expiration (Line limits 30s)
+        with DDGS(timeout=5) as ddgs:
+            # 1. Try default 'text' backend with JP region
             try:
-                results = list(ddgs.text(query, max_results=num_results))
+                results = list(ddgs.text(query, region='jp-jp', max_results=num_results))
             except Exception:
                 results = []
             
             # 2. Backups (html/lite)
             if not results:
                 try:
-                    results = list(ddgs.html(query, max_results=num_results))
+                    results = list(ddgs.html(query, region='jp-jp', max_results=num_results))
                 except Exception:
                     results = []
             
             if not results:
                 try:
-                    results = list(ddgs.lite(query, max_results=num_results))
+                    results = list(ddgs.lite(query, region='jp-jp', max_results=num_results))
                 except Exception:
                     results = []
 
