@@ -13,15 +13,76 @@ except ImportError:
     print("duckduckgo-search not available", file=sys.stderr)
 
 
-def google_web_search(query, num_results=3):
+        if not search_results:
+            return {"success": True, "query": query, "results": [], "message": "検索結果が見つかりませんでした"}
+        
+        return {
+            "success": True,
+            "query": query,
+            "results": search_results,
+            "count": len(search_results)
+        }
+    except Exception as e:
+        print(f"Search error: {e}", file=sys.stderr)
+        return {"error": f"検索エラー: {str(e)}"}
+
+
+def _google_custom_search(query, api_key, cse_id, num_results=3):
     """
-    Execute Web search and return top URLs
-    Uses duckduckgo-search library (more reliable for free use)
+    Search using Google Custom Search JSON API
+    Reliable but requires setup.
     """
     try:
-        if not SEARCH_AVAILABLE:
-            return {"error": "検索機能が利用できません（duckduckgo-searchをインストールしてください）"}
+        from googleapiclient.discovery import build
+        service = build("customsearch", "v1", developerKey=api_key)
+        res = service.cse().list(q=query, cx=cse_id, num=num_results).execute()
         
+        items = res.get('items', [])
+        results = []
+        for item in items:
+            results.append({
+                "title": item.get('title', 'No Title'),
+                "url": item.get('link', ''),
+                "snippet": item.get('snippet', '')
+            })
+        return results
+    except Exception as e:
+        print(f"Google API Search error: {e}", file=sys.stderr)
+        return []
+
+
+def google_web_search(query, num_results=3):
+    """
+    Execute Web search and return top URLs.
+    Priority:
+    1. Google Custom Search API (Reliable, requires env set)
+    2. DuckDuckGo (Free, but often blocked on Vercel)
+    """
+    import os
+    
+    # 1. Try Google Custom Search API first (if configured)
+    api_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('GEMINI_API_KEY') # Fallback to Gemini key if same project
+    cse_id = os.environ.get('GOOGLE_CSE_ID')
+    
+    if api_key and cse_id:
+        print("Using Google Custom Search API...", file=sys.stderr)
+        results = _google_custom_search(query, api_key, cse_id, num_results)
+        if results:
+            return {
+                "success": True,
+                "query": query,
+                "results": results,
+                "count": len(results)
+            }
+        print("Google API returned no results, falling back to DDG...", file=sys.stderr)
+
+    # 2. Fallback to DuckDuckGo (Original Logic)
+    try:
+        if not SEARCH_AVAILABLE:
+            api_status = "(Google API not configured)" if not (api_key and cse_id) else "(Google API failed)"
+            return {"error": f"検索機能が利用できません {api_status}"}
+        
+        print("Using DuckDuckGo Search...", file=sys.stderr)
         # Execute search
         search_results = []
         # Set timeout to avoid Reply Token expiration
