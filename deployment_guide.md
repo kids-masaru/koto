@@ -15,8 +15,10 @@ LINE Bot「Koto」を完全無料で運用するための、Vercelへのデプ�
     `mottora/koto` (または現在のリポジトリ名) を探し、「Import」ボタンを押します。
 
 3.  **設定の確認**:
-    *   **Framework Preset**: `Other` (または自動検出) でOKですが、何も選ばなくても `vercel.json` があるので自動認識されます。
-    *   **Root Directory**: `./` (そのままでOK)
+    *   **Framework Preset**: `Other` を選択します。
+    *   **Build Command**: 空欄でOK
+    *   **Install Command**: `pip install -r requirements.txt` (自動入力されない場合)
+    *   **Output Directory**: `.` (ドット) または空欄
 
 4.  **環境変数の設定 (Environment Variables)**:
     「Environment Variables」のセクションを開き、以下の変数を登録します（`.env` ファイルの中身と同じです）。

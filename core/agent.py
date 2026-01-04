@@ -22,7 +22,8 @@ def execute_tool(tool_name, args, user_id=None):
     from tools.web_ops import google_web_search, fetch_url
     from tools.google_ops import (
         create_google_doc, create_google_sheet, create_google_slide,
-        search_drive, list_gmail, get_gmail_body
+        search_drive, list_gmail, get_gmail_body,
+        list_calendar_events, create_calendar_event
     )
     from utils.user_db import register_user
     
@@ -59,6 +60,19 @@ def execute_tool(tool_name, args, user_id=None):
         if not user_id:
             return {"error": "ユーザーIDが取得できませんでした。"}
         return register_user(user_id, args.get("location", ""))
+    elif tool_name == "list_calendar_events":
+        return list_calendar_events(
+            args.get("query"),
+            args.get("time_min"),
+            args.get("time_max")
+        )
+    elif tool_name == "create_calendar_event":
+        return create_calendar_event(
+            args.get("summary"),
+            args.get("start_time"),
+            args.get("end_time"),
+            args.get("location")
+        )
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -132,6 +146,22 @@ def format_tool_result(tool_name, result):
         return f"📧 {subject}\n---\n{body}"
     elif tool_name == "set_reminder":
         return f"リマインダー設定しました！✨\n毎日朝7時頃に「{result.get('location', '')}」の天気と服装をお知らせしますね！☀️"
+    
+    elif tool_name == "list_calendar_events":
+        events = result.get("events", [])
+        if not events:
+            return "予定は見つかりませんでした〜"
+        
+        response = f"予定を確認しました！{len(events)}件あります📅\n\n"
+        for evt in events[:5]:
+            start = evt['start'].get('dateTime', evt['start'].get('date'))
+            summary = evt.get('summary', '(タイトルなし)')
+            response += f"🗓️ {start[:16].replace('T', ' ')}\n   {summary}\n\n"
+        return response.strip()
+
+    elif tool_name == "create_calendar_event":
+        link = result.get("link", "")
+        return f"予定を追加しました！✨\n\n📅 {result.get('event', {}).get('summary', '')}\n🔗 {link}"
     
     return json.dumps(result, ensure_ascii=False)
 

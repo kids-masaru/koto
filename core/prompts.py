@@ -44,6 +44,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「スプレッドシート作って」→ 必ず create_google_sheet を呼び出す
 - 「メール確認」「Gmail」→ 必ず list_gmail を呼び出す
 - 「ドライブ検索」「ファイル探して」→ 必ず search_drive を呼び出す
+- 「予定教えて」「スケジュール」→ 必ず list_calendar_events を呼び出す
+- 「予定を入れて」→ 必ず create_calendar_event を呼び出す
 
 ツールを呼び出さずに「検索結果」や「計算結果」を想像で答えることは絶対に禁止です。
 ツールの実行に失敗した場合は、正直に「エラーで実行できませんでした」と伝えてください。嘘の成功報告は禁止です。
@@ -205,6 +207,33 @@ TOOLS = [
                 "location": {"type": "string", "description": "予報する地域名（例: 福岡市）"}
             },
             "required": ["location"]
+        }
+    },
+    {
+        "name": "list_calendar_events",
+        "description": "Googleカレンダーの予定を確認します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索キーワード（任意）"},
+                "time_min": {"type": "string", "description": "開始日時 (ISO 8601形式)"},
+                "time_max": {"type": "string", "description": "終了日時 (ISO 8601形式)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "create_calendar_event",
+        "description": "Googleカレンダーに予定を追加します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "予定のタイトル"},
+                "start_time": {"type": "string", "description": "開始日時 (ISO 8601形式, 例: 2024-01-01T10:00:00)"},
+                "end_time": {"type": "string", "description": "終了日時 (ISO 8601形式)"},
+                "location": {"type": "string", "description": "場所"}
+            },
+            "required": ["summary", "start_time"]
         }
     }
 ]

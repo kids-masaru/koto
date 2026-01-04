@@ -236,6 +236,70 @@ def list_gmail(query="is:unread", max_results=5):
         return {"error": f"Gmail操作中にエラーが発生しました: {str(e)}"}
 
 
+def list_calendar_events(query=None, time_min=None, time_max=None):
+    """List calendar events"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        service = build('calendar', 'v3', credentials=creds)
+        
+        # Default to now if not specified
+        if not time_min:
+            import datetime
+            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            time_min = now
+            
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=time_min,
+            timeMax=time_max,
+            q=query,
+            maxResults=10, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        events = events_result.get('items', [])
+        return {"success": True, "events": events, "count": len(events)}
+        
+    except Exception as e:
+        print(f"Calendar list error: {e}", file=sys.stderr)
+        return {"error": f"カレンダー取得中にエラーが発生しました: {str(e)}"}
+
+
+def create_calendar_event(summary, start_time, end_time=None, location=None):
+    """Create a new calendar event"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        service = build('calendar', 'v3', credentials=creds)
+        
+        event = {
+            'summary': summary,
+            'location': location,
+            'start': {
+                'dateTime': start_time,
+                'timeZone': 'Asia/Tokyo',
+            },
+            'end': {
+                'dateTime': end_time if end_time else start_time,
+                'timeZone': 'Asia/Tokyo',
+            },
+        }
+
+        event = service.events().insert(calendarId='primary', body=event).execute()
+        print(f"Event created: {event.get('htmlLink')}", file=sys.stderr)
+        return {"success": True, "event": event, "link": event.get('htmlLink')}
+        
+    except Exception as e:
+        print(f"Calendar create error: {e}", file=sys.stderr)
+        return {"error": f"予定作成中にエラーが発生しました: {str(e)}"}
+
+
 def get_gmail_body(message_id: str):
     """Fetch full email body (plain text) for a given Gmail message ID."""
     try:
@@ -273,49 +337,4 @@ def get_gmail_body(message_id: str):
         print(f"Gmail body error: {e}", file=sys.stderr)
         return {"error": f"メール本文取得中にエラーが発生しました: {str(e)}"}
 
-    """List Gmail messages matching query"""
-    try:
-        creds = get_google_credentials()
-        if not creds:
-            return {"error": "Google認証に失敗しました。"}
-        
-        gmail_service = build('gmail', 'v1', credentials=creds)
-        
-        results = gmail_service.users().messages().list(
-            userId='me',
-            q=query,
-            maxResults=max_results
-        ).execute()
-        
-        messages = results.get('messages', [])
-        
-        if not messages:
-            return {"success": True, "emails": [], "count": 0}
-        
-        email_list = []
-        
-        for msg in messages[:max_results]:
-            try:
-                msg_data = gmail_service.users().messages().get(
-                    userId='me',
-                    id=msg['id'],
-                    format='metadata',
-                    metadataHeaders=['Subject', 'From', 'Date']
-                ).execute()
-                
-                headers = {h['name']: h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
-                email_list.append({
-                    'id': msg['id'],
-                    'subject': headers.get('Subject', '(件名なし)'),
-                    'from': headers.get('From', ''),
-                    'date': headers.get('Date', ''),
-                    'snippet': msg_data.get('snippet', '')
-                })
-            except Exception as e:
-                print(f"Error getting message: {e}", file=sys.stderr)
-                continue
-        
-        return {"success": True, "emails": email_list, "count": len(email_list)}
-    except Exception as e:
-        print(f"Gmail error: {e}", file=sys.stderr)
-        return {"error": f"Gmail操作中にエラーが発生しました: {str(e)}"}
+
