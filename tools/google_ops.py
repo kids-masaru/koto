@@ -300,6 +300,50 @@ def create_calendar_event(summary, start_time, end_time=None, location=None):
         return {"error": f"予定作成中にエラーが発生しました: {str(e)}"}
 
 
+def list_tasks(show_completed=False, due_date=None):
+    """List Google Tasks"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        service = build('tasks', 'v1', credentials=creds)
+        
+        results = service.tasks().list(
+            tasklist='@default',
+            showCompleted=show_completed,
+            maxResults=20
+        ).execute()
+        
+        tasks = results.get('items', [])
+        return {"success": True, "tasks": tasks, "count": len(tasks)}
+    except Exception as e:
+        print(f"Tasks list error: {e}", file=sys.stderr)
+        return {"error": f"ToDoリスト取得中にエラーが発生しました: {str(e)}"}
+
+
+def add_task(title, due=None):
+    """Add a new Google Task (due: RFC 3339 timestamp string)"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        service = build('tasks', 'v1', credentials=creds)
+        
+        task = {
+            'title': title
+        }
+        if due:
+            task['due'] = due
+            
+        result = service.tasks().insert(tasklist='@default', body=task).execute()
+        return {"success": True, "task": result}
+    except Exception as e:
+        print(f"Tasks add error: {e}", file=sys.stderr)
+        return {"error": f"ToDo追加中にエラーが発生しました: {str(e)}"}
+
+
 def get_gmail_body(message_id: str):
     """Fetch full email body (plain text) for a given Gmail message ID."""
     try:

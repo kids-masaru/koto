@@ -23,7 +23,8 @@ def execute_tool(tool_name, args, user_id=None):
     from tools.google_ops import (
         create_google_doc, create_google_sheet, create_google_slide,
         search_drive, list_gmail, get_gmail_body,
-        list_calendar_events, create_calendar_event
+        list_calendar_events, create_calendar_event,
+        list_tasks, add_task
     )
     from utils.user_db import register_user
     
@@ -73,6 +74,10 @@ def execute_tool(tool_name, args, user_id=None):
             args.get("end_time"),
             args.get("location")
         )
+    elif tool_name == "list_tasks":
+        return list_tasks(args.get("show_completed", False), args.get("due_date"))
+    elif tool_name == "add_task":
+        return add_task(args.get("title"), args.get("due_date"))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -162,6 +167,21 @@ def format_tool_result(tool_name, result):
     elif tool_name == "create_calendar_event":
         link = result.get("link", "")
         return f"予定を追加しました！✨\n\n📅 {result.get('event', {}).get('summary', '')}\n🔗 {link}"
+    
+    elif tool_name == "list_tasks":
+        tasks = result.get("tasks", [])
+        if not tasks:
+            return "ToDoリストはありませんでした〜"
+        response = f"ToDoを確認しました！{len(tasks)}件あります📝\n\n"
+        for t in tasks[:10]:
+            title = t['title']
+            due = f" (期限: {t['due'][:10]})" if 'due' in t else ""
+            response += f"☐ {title}{due}\n"
+        return response.strip()
+
+    elif tool_name == "add_task":
+        t = result.get("task", {})
+        return f"ToDoを追加しました！✨\n\n📝 {t.get('title', '')}"
     
     return json.dumps(result, ensure_ascii=False)
 

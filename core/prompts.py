@@ -46,6 +46,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「ドライブ検索」「ファイル探して」→ 必ず search_drive を呼び出す
 - 「予定教えて」「スケジュール」→ 必ず list_calendar_events を呼び出す
 - 「予定を入れて」→ 必ず create_calendar_event を呼び出す
+- 「タスク追加」「ToDo追加」→ 必ず add_task を呼び出す
+- 「やること教えて」「ToDo確認」→ 必ず list_tasks を呼び出す
 
 ツールを呼び出さずに「検索結果」や「計算結果」を想像で答えることは絶対に禁止です。
 ツールの実行に失敗した場合は、正直に「エラーで実行できませんでした」と伝えてください。嘘の成功報告は禁止です。
@@ -234,6 +236,30 @@ TOOLS = [
                 "location": {"type": "string", "description": "場所"}
             },
             "required": ["summary", "start_time"]
+        }
+    },
+    {
+        "name": "list_tasks",
+        "description": "Google ToDoリストのタスクを確認します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "show_completed": {"type": "boolean", "description": "完了済みも表示するか"},
+                "due_date": {"type": "string", "description": "期限でフィルタ (RFC 3339形式)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "add_task",
+        "description": "Google ToDoリストにタスクを追加します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "タスクの内容"},
+                "due_date": {"type": "string", "description": "期限 (RFC 3339形式, 例: 2024-01-01T00:00:00Z)"}
+            },
+            "required": ["title"]
         }
     }
 ]

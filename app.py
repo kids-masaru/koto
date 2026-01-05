@@ -234,10 +234,10 @@ def cron_job():
         # Simulate a user request to trigger Agent Logic (Search -> Summarize)
         # Instructing specific format for splitting
         prompt = (
-            f"今日の{location}の天気、今日・明日・今週(平日)の自分の予定を確認して、まとめて教えて！\n"
+            f"今日の{location}の天気、今日・明日・今週(平日)の自分の予定と期限切れそうなタスク(Google Tasks)を確認して、まとめて教えて！\n"
             "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
             "1. 今日の天気と服装のアドバイス\n"
-            "2. 今後のスケジュール（今日、明日、今週）\n"
+            "2. 今後のスケジュール・タスク（今日、明日、今週）\n"
             "3. 曜日に合わせた気の利いた一言メッセージ（例：月曜なら「今週も頑張ろう」、金曜なら「明日はお休み」など）"
         )
         print(f"Generating report for {user_id[:8]} ({location})...", file=sys.stderr)
