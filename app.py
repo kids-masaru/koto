@@ -40,35 +40,48 @@ def verify_signature(body, signature):
     return hmac.compare_digest(signature, base64.b64encode(hash_value).decode('utf-8'))
 
 
-def push_message(user_id, text):
-    """Send message via LINE Push API (for async responses)"""
+def push_message(user_id, texts):
+    """Send message via LINE Push API (for async responses)
+       texts: string or list of strings
+    """
     url = 'https://api.line.me/v2/bot/message/push'
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
     }
     
-    # Truncate if too long
-    if len(text) > 4500:
-        text = text[:4500] + "..."
+    # Normalize to list
+    if isinstance(texts, str):
+        texts = [texts]
+        
+    messages = []
+    for text in texts:
+        # Truncate if too long
+        if len(text) > 4500:
+            text = text[:4500] + "..."
+        messages.append({'type': 'text', 'text': text})
     
-    data = {
-        'to': user_id,
-        'messages': [{'type': 'text', 'text': text}]
-    }
-    
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(data).encode('utf-8'),
-        headers=headers,
-        method='POST'
-    )
-    
-    try:
-        with urllib.request.urlopen(req) as res:
-            print(f"Push sent to {user_id[:8]}: {res.status}", file=sys.stderr)
-    except Exception as e:
-        print(f"Push error: {e}", file=sys.stderr)
+    # Send in chunks of 5 (LINE API limit)
+    for i in range(0, len(messages), 5):
+        chunk = messages[i:i+5]
+        
+        data = {
+            'to': user_id,
+            'messages': chunk
+        }
+        
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+        
+        try:
+            with urllib.request.urlopen(req) as res:
+                print(f"Push sent to {user_id[:8]}: {res.status}", file=sys.stderr)
+        except Exception as e:
+            print(f"Push error: {e}", file=sys.stderr)
 
 
 def reply_message(reply_token, text):
@@ -219,17 +232,32 @@ def cron_job():
         location = user['location']
         
         # Simulate a user request to trigger Agent Logic (Search -> Summarize)
-        prompt = f"今日の{location}の天気と、それに合わせた服装のアドバイスを教えて！"
+        # Instructing specific format for splitting
+        prompt = (
+            f"今日の{location}の天気、今日・明日・今週(平日)の自分の予定を確認して、まとめて教えて！\n"
+            "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
+            "1. 今日の天気と服装のアドバイス\n"
+            "2. 今後のスケジュール（今日、明日、今週）\n"
+            "3. 曜日に合わせた気の利いた一言メッセージ（例：月曜なら「今週も頑張ろう」、金曜なら「明日はお休み」など）"
+        )
         print(f"Generating report for {user_id[:8]} ({location})...", file=sys.stderr)
         
         try:
             # Use get_gemini_response directly to leverage existing tool logic
             response = get_gemini_response(user_id, prompt)
             
-            # Add Morning Greeting
-            final_message = f"おはようございます！☀️\n{response}"
+            # Split response by delimiter
+            messages = [msg.strip() for msg in response.split('@@@') if msg.strip()]
             
-            push_message(user_id, final_message)
+            # Add Morning Greeting to the first message if not present
+            if messages:
+                if "おはよう" not in messages[0]:
+                    messages[0] = f"おはようございます！☀️\n\n{messages[0]}"
+            else:
+                # Fallback if split fails
+                messages = [f"おはようございます！☀️\n{response}"]
+            
+            push_message(user_id, messages)
             print(f"Sent morning report to {user_id[:8]}", file=sys.stderr)
         except Exception as e:
             print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
