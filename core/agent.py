@@ -259,6 +259,8 @@ def get_gemini_response(user_id, user_message):
     # Combine prompts
     full_system_prompt = SYSTEM_PROMPT + personality_section + user_name_section + knowledge_context + master_prompt_section
     
+    # Build conversation contents
+    contents = []
     contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
     contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
     
