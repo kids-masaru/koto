@@ -1,6 +1,6 @@
 """
 Koto AI Secretary - LINE Bot Entry Point
-Flask server with asynchronous message processing
+Flask server with asynchronous message processing and Config API
 """
 import os
 import sys
@@ -20,8 +20,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.agent import get_gemini_response
 from utils.storage import clear_user_history
+from utils.sheets_config import load_config, save_config
+from tools.google_ops import search_drive
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for dashboard
 
 # LINE credentials
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
@@ -231,14 +235,17 @@ def cron_job():
         user_id = user['user_id']
         location = user['location']
         
-        # Simulate a user request to trigger Agent Logic (Search -> Summarize)
-        # Instructing specific format for splitting
+        # Load user-specific config (or global config for now)
+        user_config = load_config()
+        base_prompt = user_config.get('reminder_prompt', '今日の天気と予定を教えて')
+        
+        # Build prompt with location and formatting instructions
         prompt = (
-            f"今日の{location}の天気、今日・明日・今週(平日)の自分の予定と期限切れそうなタスク(Google Tasks)を確認して、まとめて教えて！\n"
+            f"今日の{location}の{base_prompt}\n"
             "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
-            "1. 今日の天気と服装のアドバイス\n"
-            "2. 今後のスケジュール・タスク（今日、明日、今週）\n"
-            "3. 曜日に合わせた気の利いた一言メッセージ（例：月曜なら「今週も頑張ろう」、金曜なら「明日はお休み」など）"
+            "1. 天気に関する情報\n"
+            "2. スケジュール・タスクに関する情報\n"
+            "3. 気の利いた一言メッセージ"
         )
         print(f"Generating report for {user_id[:8]} ({location})...", file=sys.stderr)
         
@@ -263,6 +270,69 @@ def cron_job():
             print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
             
     return f'Processed {len(users)} users', 200
+
+
+@app.route('/api/config', methods=['GET', 'POST'])
+def handle_config():
+    """Get or update configuration"""
+    if request.method == 'GET':
+        return json.dumps(load_config(), ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+    
+    elif request.method == 'POST':
+        try:
+            new_config = request.json
+            if save_config(new_config):
+                return json.dumps({"success": True, "config": new_config}), 200, {'Content-Type': 'application/json'}
+            else:
+                return json.dumps({"error": "Failed to save config"}), 500, {'Content-Type': 'application/json'}
+        except Exception as e:
+            return json.dumps({"error": str(e)}), 400, {'Content-Type': 'application/json'}
+
+@app.route('/api/folders', methods=['GET'])
+def list_folders():
+    """List Google Drive folders for selection (Navigation support)"""
+    query = request.args.get('q', '')
+    parent_id = request.args.get('parentId')
+    
+    try:
+        from utils.auth import get_google_credentials
+        from googleapiclient.discovery import build
+        
+        creds = get_google_credentials()
+        if not creds:
+             return json.dumps({"error": "Auth failed"}), 401, {'Content-Type': 'application/json'}
+             
+        service = build('drive', 'v3', credentials=creds)
+        
+        # Base filter: folders only, not trashed
+        q_filter = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        
+        if parent_id:
+            # Navigate into specific folder
+            q_filter += f" and '{parent_id}' in parents"
+        elif query:
+            # Search mode (global)
+            # Escape single quotes
+            safe_query = query.replace("'", "\\'")
+            q_filter += f" and name contains '{safe_query}'"
+        else:
+            # Default: Root folder
+            q_filter += " and 'root' in parents"
+            
+        results = service.files().list(
+            q=q_filter,
+            pageSize=50,
+            fields="files(id, name)",
+            orderBy="folder,name",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
+        ).execute()
+        
+        folders = results.get('files', [])
+        return json.dumps({"folders": folders}), 200, {'Content-Type': 'application/json'}
+        
+    except Exception as e:
+        return json.dumps({"error": str(e)}), 500, {'Content-Type': 'application/json'}
 
 
 if __name__ == '__main__':

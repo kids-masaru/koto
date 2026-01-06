@@ -1,0 +1,361 @@
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Settings, Save, Search, Folder, FolderOpen, ChevronRight, Loader2, Bot, Bell, User, Trash2, Database, Plus, Home, ArrowLeft } from 'lucide-react';
+import axios from 'axios';
+
+// API Base URL
+// In development: use local backend
+// In production: use the deployed KOTO backend on Vercel
+const API_BASE = import.meta.env.PROD
+  ? 'https://koto-tan.vercel.app'  // KOTO's deployed URL
+  : 'http://localhost:8080';
+
+// --- Types ---
+interface Folder {
+  id: string;
+  name: string;
+}
+
+interface KnowledgeSource {
+  id: string;
+  name: string;
+  instruction: string; // Specific instruction for this folder
+}
+
+interface Config {
+  user_name: string;
+  personality: string;
+  knowledge_sources: KnowledgeSource[];
+  reminder_time: string;
+  reminder_prompt: string;
+}
+
+// --- Components ---
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center p-4">
+    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+  </div>
+);
+
+// Folder Browser Component (Explorer Style)
+const FolderBrowser = ({ onSelect, onCancel }: { onSelect: (folder: Folder) => void, onCancel: () => void }) => {
+  const [currentPath, setCurrentPath] = useState<Folder[]>([{ id: '', name: 'マイドライブ' }]); // Root
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const currentFolder = currentPath[currentPath.length - 1];
+
+  const fetchFolders = async (parentId?: string) => {
+    setLoading(true);
+    try {
+      const pId = parentId || '';
+      const res = await axios.get(`${API_BASE}/api/folders?parentId=${pId}`);
+      setFolders(res.data.folders);
+    } catch (error) {
+      console.error('Failed to fetch folders', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // If id is empty, it fetches root
+    fetchFolders(currentFolder.id);
+  }, [currentFolder]);
+
+  const handleNavigate = (folder: Folder) => {
+    setCurrentPath([...currentPath, folder]);
+  };
+
+  const handleBack = () => {
+    if (currentPath.length > 1) {
+      setCurrentPath(currentPath.slice(0, -1));
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    >
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+        {/* Header */}
+        <div className="bg-gray-50 border-b px-6 py-4 flex items-center justify-between">
+          <h3 className="font-bold text-gray-700 flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-indigo-500" />
+            フォルダを選択
+          </h3>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        {/* Breadcrumbs / Navigation */}
+        <div className="px-4 py-3 bg-white border-b flex items-center gap-2 text-sm text-gray-600 overflow-x-auto whitespace-nowrap">
+          {currentPath.length > 1 && (
+            <button onClick={handleBack} className="p-1 hover:bg-gray-100 rounded-full mr-1">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          {currentPath.map((f, i) => (
+            <div key={i} className="flex items-center">
+              {i > 0 && <ChevronRight className="w-4 h-4 text-gray-300 mx-1" />}
+              <span className={i === currentPath.length - 1 ? "font-bold text-indigo-600" : ""}>
+                {f.name}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Folder List */}
+        <div className="flex-grow overflow-y-auto p-2 bg-gray-50">
+          {loading ? <LoadingSpinner /> : (
+            <div className="grid gap-1">
+              {folders.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-sm">フォルダがありません</div>
+              ) : (
+                folders.map((folder) => (
+                  <div key={folder.id} className="group bg-white p-3 rounded-lg border border-gray-100 hover:border-indigo-200 hover:shadow-sm flex items-center justify-between transition-all cursor-pointer"
+                    onClick={() => handleNavigate(folder)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Folder className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />
+                      <span className="text-gray-700 font-medium">{folder.name}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Don't navigate
+                        onSelect(folder);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-50 text-indigo-600 text-xs font-bold rounded hover:bg-indigo-100 transition-colors"
+                    >
+                      このフォルダを追加
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(false);
+
+  const [config, setConfig] = useState<Config>({
+    user_name: '',
+    personality: '',
+    knowledge_sources: [],
+    reminder_time: '',
+    reminder_prompt: ''
+  });
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/config`);
+      // Backward compatibility handling if knowledge_folder_id exists
+      const data = res.data;
+      if (data.knowledge_folder_id && (!data.knowledge_sources || data.knowledge_sources.length === 0)) {
+        data.knowledge_sources = [{ id: data.knowledge_folder_id, name: '移行されたフォルダ', instruction: '全般的な知識として利用' }];
+      }
+      if (!data.knowledge_sources) data.knowledge_sources = [];
+      setConfig(data);
+    } catch (error) {
+      console.error('Failed to fetch config', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await axios.post(`${API_BASE}/api/config`, config);
+      alert('設定を保存しました！✨');
+    } catch (error) {
+      console.error('Failed to save config', error);
+      alert('保存に失敗しました...');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addFolder = (folder: Folder) => {
+    // Check duplicate
+    if (config.knowledge_sources.some(k => k.id === folder.id)) {
+      alert('このフォルダは既に追加されています');
+      return;
+    }
+    setConfig(prev => ({
+      ...prev,
+      knowledge_sources: [...prev.knowledge_sources, {
+        id: folder.id,
+        name: folder.name,
+        instruction: 'このフォルダに関する質問に答えてください' // Default prompt
+      }]
+    }));
+    setShowBrowser(false);
+  };
+
+  const removeFolder = (id: string) => {
+    setConfig(prev => ({
+      ...prev,
+      knowledge_sources: prev.knowledge_sources.filter(k => k.id !== id)
+    }));
+  };
+
+  const updateInstruction = (id: string, text: string) => {
+    setConfig(prev => ({
+      ...prev,
+      knowledge_sources: prev.knowledge_sources.map(k => k.id === id ? { ...k, instruction: text } : k)
+    }));
+  };
+
+  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+
+  return (
+    <div className="min-h-screen bg-[#F3F4F6] text-gray-800 font-sans selection:bg-indigo-100 selection:text-indigo-800">
+      <div className="max-w-3xl mx-auto py-12 px-4">
+
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center shadow-lg">
+            <Bot className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-gray-900">KOTO CONFIG</h1>
+            <p className="text-sm text-gray-500 font-medium">AI・ナレッジ管理コンソール</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+
+          {/* 1. Basic Profile Card */}
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
+              <User className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Basic Profile</h2>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">My Name</label>
+                <input type="text" value={config.user_name} onChange={e => setConfig({ ...config, user_name: e.target.value })} className="w-full px-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none" placeholder="User Name" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Personality</label>
+                <input type="text" value={config.personality} onChange={e => setConfig({ ...config, personality: e.target.value })} className="w-full px-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none" placeholder="AI Personality" />
+              </div>
+            </div>
+          </section>
+
+          {/* 2. Morning Reminder Card */}
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
+              <Bell className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Morning Reminder</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">通知時刻</label>
+                <input type="time" value={config.reminder_time} onChange={e => setConfig({ ...config, reminder_time: e.target.value })} className="w-full md:w-40 px-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">リマインドの内容（AIへの指示）</label>
+                <textarea
+                  value={config.reminder_prompt}
+                  onChange={e => setConfig({ ...config, reminder_prompt: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
+                  rows={4}
+                  placeholder="例: 今日の天気、今日・明日・今週の予定とタスクを確認して、まとめて教えて！最後に今日も頑張ろうという気持ちになる一言をお願い！"
+                />
+                <p className="text-xs text-gray-400 mt-1">※ここに書いた内容をAIに指示して、毎朝メッセージを生成します。</p>
+              </div>
+            </div>
+          </section>
+
+          {/* 2. Knowledge Base Card */}
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative">
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-gray-400" />
+                <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Knowledge Sources</h2>
+              </div>
+              <button onClick={() => setShowBrowser(true)} className="text-xs font-bold text-white bg-black px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1 shadow-sm">
+                <Plus className="w-3 h-3" /> Add Folder
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {config.knowledge_sources.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl">
+                  <Folder className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400 font-medium">No knowledge sources connected.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {config.knowledge_sources.map((source) => (
+                    <motion.div layout key={source.id} className="group relative bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-yellow-50 rounded-lg flex items-center justify-center">
+                            <Folder className="w-4 h-4 text-yellow-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-gray-800 text-sm">{source.name}</h3>
+                            <p className="text-[10px] text-gray-400 font-mono">ID: {source.id}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => removeFolder(source.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Config Prompt Area */}
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Instruction Context</label>
+                        <textarea
+                          value={source.instruction}
+                          onChange={(e) => updateInstruction(source.id, e.target.value)}
+                          className="w-full bg-transparent text-sm text-gray-700 outline-none resize-none placeholder-gray-300"
+                          rows={2}
+                          placeholder="Example: Use this for sales questions..."
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Footer Action */}
+          <div className="flex justify-end pt-4 pb-12">
+            <button onClick={handleSave} disabled={saving} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-700 hover:shadow-xl hover:-translate-y-0.5 transition-all text-sm flex items-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Configuration
+            </button>
+          </div>
+
+        </div>
+
+        {/* Modal */}
+        <AnimatePresence>
+          {showBrowser && <FolderBrowser onSelect={addFolder} onCancel={() => setShowBrowser(false)} />}
+        </AnimatePresence>
+
+      </div>
+    </div>
+  );
+}
+
+export default App;
