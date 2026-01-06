@@ -22,12 +22,18 @@ interface KnowledgeSource {
   instruction: string; // Specific instruction for this folder
 }
 
+interface Reminder {
+  name: string;
+  time: string;
+  prompt: string;
+  enabled: boolean;
+}
+
 interface Config {
   user_name: string;
   personality: string;
   knowledge_sources: KnowledgeSource[];
-  reminder_time: string;
-  reminder_prompt: string;
+  reminders: Reminder[];
 }
 
 // --- Components ---
@@ -152,8 +158,7 @@ function App() {
     user_name: '',
     personality: '',
     knowledge_sources: [],
-    reminder_time: '',
-    reminder_prompt: ''
+    reminders: []
   });
 
   useEffect(() => {
@@ -163,12 +168,25 @@ function App() {
   const fetchConfig = async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/config`);
-      // Backward compatibility handling if knowledge_folder_id exists
       const data = res.data;
+
+      // Backward compatibility: knowledge_folder_id -> knowledge_sources
       if (data.knowledge_folder_id && (!data.knowledge_sources || data.knowledge_sources.length === 0)) {
         data.knowledge_sources = [{ id: data.knowledge_folder_id, name: '移行されたフォルダ', instruction: '全般的な知識として利用' }];
       }
       if (!data.knowledge_sources) data.knowledge_sources = [];
+
+      // Backward compatibility: reminder_time/reminder_prompt -> reminders array
+      if (!data.reminders && data.reminder_time) {
+        data.reminders = [{
+          name: '朝のリマインダー',
+          time: data.reminder_time,
+          prompt: data.reminder_prompt || '',
+          enabled: true
+        }];
+      }
+      if (!data.reminders) data.reminders = [];
+
       setConfig(data);
     } catch (error) {
       console.error('Failed to fetch config', error);
@@ -258,28 +276,93 @@ function App() {
             </div>
           </section>
 
-          {/* 2. Morning Reminder Card */}
+          {/* 2. Reminders Card */}
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
-              <Bell className="w-4 h-4 text-gray-400" />
-              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Morning Reminder</h2>
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-gray-400" />
+                <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Reminders</h2>
+              </div>
+              {config.reminders.length < 3 && (
+                <button
+                  onClick={() => setConfig(prev => ({
+                    ...prev,
+                    reminders: [...prev.reminders, { name: '新しいリマインダー', time: '12:00', prompt: '', enabled: true }]
+                  }))}
+                  className="text-xs font-bold text-white bg-black px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1 shadow-sm"
+                >
+                  <Plus className="w-3 h-3" /> 追加
+                </button>
+              )}
             </div>
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">通知時刻</label>
-                <input type="time" value={config.reminder_time} onChange={e => setConfig({ ...config, reminder_time: e.target.value })} className="w-full md:w-40 px-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">リマインドの内容（AIへの指示）</label>
-                <textarea
-                  value={config.reminder_prompt}
-                  onChange={e => setConfig({ ...config, reminder_prompt: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
-                  rows={4}
-                  placeholder="例: 今日の天気、今日・明日・今週の予定とタスクを確認して、まとめて教えて！最後に今日も頑張ろうという気持ちになる一言をお願い！"
-                />
-                <p className="text-xs text-gray-400 mt-1">※ここに書いた内容をAIに指示して、毎朝メッセージを生成します。</p>
-              </div>
+              {config.reminders.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl">
+                  <Bell className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400 font-medium">リマインダーがありません</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {config.reminders.map((reminder, index) => (
+                    <motion.div layout key={index} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={reminder.enabled}
+                            onChange={(e) => {
+                              const newReminders = [...config.reminders];
+                              newReminders[index] = { ...reminder, enabled: e.target.checked };
+                              setConfig({ ...config, reminders: newReminders });
+                            }}
+                            className="w-4 h-4 text-indigo-600 rounded"
+                          />
+                          <input
+                            type="text"
+                            value={reminder.name}
+                            onChange={(e) => {
+                              const newReminders = [...config.reminders];
+                              newReminders[index] = { ...reminder, name: e.target.value };
+                              setConfig({ ...config, reminders: newReminders });
+                            }}
+                            className="font-bold text-gray-800 text-sm bg-transparent border-none outline-none"
+                            placeholder="リマインダー名"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={reminder.time}
+                            onChange={(e) => {
+                              const newReminders = [...config.reminders];
+                              newReminders[index] = { ...reminder, time: e.target.value };
+                              setConfig({ ...config, reminders: newReminders });
+                            }}
+                            className="px-2 py-1 bg-gray-50 rounded text-sm"
+                          />
+                          <button
+                            onClick={() => setConfig(prev => ({ ...prev, reminders: prev.reminders.filter((_, i) => i !== index) }))}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={reminder.prompt}
+                        onChange={(e) => {
+                          const newReminders = [...config.reminders];
+                          newReminders[index] = { ...reminder, prompt: e.target.value };
+                          setConfig({ ...config, reminders: newReminders });
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm outline-none resize-none"
+                        rows={2}
+                        placeholder="AIへの指示（例: 今日の天気と予定を教えて）"
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 

@@ -13,8 +13,14 @@ DEFAULT_CONFIG = {
     "user_name": "井崎さん",
     "personality": "元気な秘書",
     "knowledge_sources": [],
-    "reminder_time": "07:00",
-    "reminder_prompt": "今日の天気、今日・明日・今週の予定とタスクを確認して、まとめて教えて！最後に今日も頑張ろうという気持ちになる一言をお願い！"
+    "reminders": [
+        {
+            "name": "朝のリマインダー",
+            "time": "07:00",
+            "prompt": "今日の天気、今日・明日・今週の予定とタスクを確認して、まとめて教えて！最後に今日も頑張ろうという気持ちになる一言をお願い！",
+            "enabled": True
+        }
+    ]
 }
 
 _config_sheet_id = None  # Cache
