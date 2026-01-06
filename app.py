@@ -238,37 +238,74 @@ def cron_job():
         
         # Load user-specific config (or global config for now)
         user_config = load_config()
-        base_prompt = user_config.get('reminder_prompt', '今日の天気と予定を教えて')
         
-        # Build prompt with location and formatting instructions
-        prompt = (
-            f"今日の{location}の{base_prompt}\n"
-            "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
-            "1. 天気に関する情報\n"
-            "2. スケジュール・タスクに関する情報\n"
-            "3. 気の利いた一言メッセージ"
-        )
-        print(f"Generating report for {user_id[:8]} ({location})...", file=sys.stderr)
+        # Get reminders array (new format) or fallback to old format
+        reminders = user_config.get('reminders', [])
         
-        try:
-            # Use get_gemini_response directly to leverage existing tool logic
-            response = get_gemini_response(user_id, prompt)
+        # Fallback: if no reminders but old format exists, convert it
+        if not reminders and user_config.get('reminder_time'):
+            reminders = [{
+                'name': '朝のリマインダー',
+                'time': user_config.get('reminder_time', '07:00'),
+                'prompt': user_config.get('reminder_prompt', '今日の天気と予定を教えて'),
+                'enabled': True
+            }]
+        
+        # Get current time in JST
+        from datetime import datetime, timezone, timedelta
+        jst = timezone(timedelta(hours=9))
+        now = datetime.now(jst)
+        current_hour = now.hour
+        
+        # Determine which reminders should fire based on current hour
+        # We check if the reminder time's hour matches current hour
+        for reminder in reminders:
+            if not reminder.get('enabled', True):
+                continue
             
-            # Split response by delimiter
-            messages = [msg.strip() for msg in response.split('@@@') if msg.strip()]
+            reminder_time = reminder.get('time', '07:00')
+            try:
+                reminder_hour = int(reminder_time.split(':')[0])
+            except:
+                reminder_hour = 7
             
-            # Add Morning Greeting to the first message if not present
-            if messages:
-                if "おはよう" not in messages[0]:
-                    messages[0] = f"おはようございます！☀️\n\n{messages[0]}"
-            else:
-                # Fallback if split fails
-                messages = [f"おはようございます！☀️\n{response}"]
+            # Check if this reminder should fire now (within the same hour)
+            if reminder_hour != current_hour:
+                continue
             
-            push_message(user_id, messages)
-            print(f"Sent morning report to {user_id[:8]}", file=sys.stderr)
-        except Exception as e:
-            print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
+            base_prompt = reminder.get('prompt', '今日の天気と予定を教えて')
+            
+            # Build prompt with location and formatting instructions
+            prompt = (
+                f"今日の{location}の{base_prompt}\n"
+                "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
+                "1. 天気に関する情報\n"
+                "2. スケジュール・タスクに関する情報\n"
+                "3. 気の利いた一言メッセージ"
+            )
+            print(f"Generating report for {user_id[:8]} ({location}) - {reminder.get('name', 'Reminder')}...", file=sys.stderr)
+        
+            try:
+                # Use get_gemini_response directly to leverage existing tool logic
+                response = get_gemini_response(user_id, prompt)
+                
+                # Split response by delimiter
+                messages = [msg.strip() for msg in response.split('@@@') if msg.strip()]
+                
+                # Add greeting to the first message if not present
+                if messages:
+                    if current_hour < 12 and "おはよう" not in messages[0]:
+                        messages[0] = f"おはようございます！☀️\n\n{messages[0]}"
+                    elif current_hour >= 18 and "こんばんは" not in messages[0]:
+                        messages[0] = f"こんばんは！🌙\n\n{messages[0]}"
+                else:
+                    # Fallback if split fails
+                    messages = [response]
+                
+                push_message(user_id, messages)
+                print(f"Sent report to {user_id[:8]} ({reminder.get('name', 'Reminder')})", file=sys.stderr)
+            except Exception as e:
+                print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
             
     return f'Processed {len(users)} users', 200
 

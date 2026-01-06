@@ -201,16 +201,31 @@ def get_gemini_response(user_id, user_message):
     
     headers = {'Content-Type': 'application/json'}
     
-    # Build conversation contents
-    contents = []
+    # Build dynamic system prompt with config-based customizations
+    from utils.sheets_config import load_config
+    try:
+        config = load_config()
+    except:
+        config = {}
     
-    # Inject System Prompt
-    # To avoid "User, User" sequence, we merge System Prompt into the very first message
-    # OR we use the "system_instruction" feature if available (v1beta supports it but via different field)
-    # For compatibility/simplicity, we'll keep the separate turn but make the model's ack invisible/internal-only logical.
-    # However, to prevent "Lazy Okay", we'll instruct it strictly in the prompt.
+    # Build knowledge context
+    knowledge_context = ""
+    knowledge_sources = config.get('knowledge_sources', [])
+    if knowledge_sources:
+        knowledge_context = "\n\n【★ナレッジフォルダ★】\n以下のフォルダがナレッジベースとして設定されています。ユーザーの質問に関連するフォルダがあれば、search_driveでそのフォルダ内を検索してください。\n"
+        for ks in knowledge_sources:
+            knowledge_context += f"- フォルダ名: {ks.get('name', '不明')} (ID: {ks.get('id', '')}) → {ks.get('instruction', '関連する質問に答える')}\n"
     
-    contents.append({"role": "user", "parts": [{"text": SYSTEM_PROMPT}]})
+    # Get master prompt if set
+    master_prompt = config.get('master_prompt', '')
+    master_prompt_section = ""
+    if master_prompt.strip():
+        master_prompt_section = f"\n\n【★マスタープロンプト（詳細な動作指示）★】\n{master_prompt}\n"
+    
+    # Combine prompts
+    full_system_prompt = SYSTEM_PROMPT + knowledge_context + master_prompt_section
+    
+    contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
     contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
     
     for msg in history:

@@ -34,6 +34,7 @@ interface Config {
   personality: string;
   knowledge_sources: KnowledgeSource[];
   reminders: Reminder[];
+  master_prompt: string;
 }
 
 // --- Components ---
@@ -158,7 +159,8 @@ function App() {
     user_name: '',
     personality: '',
     knowledge_sources: [],
-    reminders: []
+    reminders: [],
+    master_prompt: ''
   });
 
   useEffect(() => {
@@ -273,6 +275,24 @@ function App() {
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Personality</label>
                 <input type="text" value={config.personality} onChange={e => setConfig({ ...config, personality: e.target.value })} className="w-full px-4 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none" placeholder="AI Personality" />
               </div>
+            </div>
+          </section>
+
+          {/* Master Prompt Card */}
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
+              <Bot className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">マスタープロンプト</h2>
+            </div>
+            <div className="p-6">
+              <textarea
+                value={config.master_prompt}
+                onChange={e => setConfig({ ...config, master_prompt: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
+                rows={6}
+                placeholder="例：&#10;山崎について聞かれたら → 山崎フォルダ → 録音記録 → テキストファイルを見る&#10;マミルの次にやることは？ → マミルフォルダ → 録音記録 → テキストを確認&#10;..."
+              />
+              <p className="text-xs text-gray-400 mt-2">※ここに詳細な動作指示を書くことで、AIがより正確にフォルダを検索・参照します。</p>
             </div>
           </section>
 

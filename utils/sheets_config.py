@@ -20,7 +20,8 @@ DEFAULT_CONFIG = {
             "prompt": "今日の天気、今日・明日・今週の予定とタスクを確認して、まとめて教えて！最後に今日も頑張ろうという気持ちになる一言をお願い！",
             "enabled": True
         }
-    ]
+    ],
+    "master_prompt": ""  # Detailed instructions for AI behavior
 }
 
 _config_sheet_id = None  # Cache
