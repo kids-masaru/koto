@@ -15,8 +15,8 @@ HISTORY_FILE = DATA_DIR / "history.json"
 # In-memory cache
 _history_cache = None
 
-# Maximum history per user
-MAX_HISTORY = 50
+# Maximum history per user (keep short to avoid old tool call patterns confusing AI)
+MAX_HISTORY = 10
 
 
 def _ensure_data_dir():
