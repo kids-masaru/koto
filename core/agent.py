@@ -78,6 +78,28 @@ def execute_tool(tool_name, args, user_id=None):
         return list_tasks(args.get("show_completed", False), args.get("due_date"))
     elif tool_name == "add_task":
         return add_task(args.get("title"), args.get("due_date"))
+    elif tool_name == "list_notion_tasks":
+        from tools.notion_ops import list_notion_tasks
+        # Get database_id from args or from config
+        database_id = args.get("database_id", "")
+        if not database_id:
+            from utils.sheets_config import load_config
+            config = load_config()
+            notion_dbs = config.get("notion_databases", [])
+            if notion_dbs:
+                database_id = notion_dbs[0].get("id", "")
+        return list_notion_tasks(database_id, args.get("filter_today", False))
+    elif tool_name == "create_notion_task":
+        from tools.notion_ops import create_notion_task
+        # Get database_id from args or from config
+        database_id = args.get("database_id", "")
+        if not database_id:
+            from utils.sheets_config import load_config
+            config = load_config()
+            notion_dbs = config.get("notion_databases", [])
+            if notion_dbs:
+                database_id = notion_dbs[0].get("id", "")
+        return create_notion_task(database_id, args.get("title", ""), args.get("due_date"), args.get("status"))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 

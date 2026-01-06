@@ -48,6 +48,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「予定を入れて」→ 必ず create_calendar_event を呼び出す
 - 「タスク追加」「ToDo追加」→ 必ず add_task を呼び出す
 - 「やること教えて」「ToDo確認」→ 必ず list_tasks を呼び出す
+- 「Notionのタスク」「Notionから予定」→ 必ず list_notion_tasks を呼び出す
+- 「Notionにタスク追加」「Notionに登録」→ 必ず create_notion_task を呼び出す
 
 ツールを呼び出さずに「検索結果」や「計算結果」を想像で答えることは絶対に禁止です。
 ツールの実行に失敗した場合は、正直に「エラーで実行できませんでした」と伝えてください。嘘の成功報告は禁止です。
@@ -258,6 +260,32 @@ TOOLS = [
             "properties": {
                 "title": {"type": "string", "description": "タスクの内容"},
                 "due_date": {"type": "string", "description": "期限 (RFC 3339形式, 例: 2024-01-01T00:00:00Z)"}
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "list_notion_tasks",
+        "description": "Notionデータベースからタスク/予定を取得します。database_idが必要ですが、設定されているNotion DBを自動で使用します。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "database_id": {"type": "string", "description": "NotionデータベースのID（空の場合は設定済みのDBを使用）"},
+                "filter_today": {"type": "boolean", "description": "今日の予定のみに絞るかどうか"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "create_notion_task",
+        "description": "Notionデータベースに新しいタスクを作成します",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "database_id": {"type": "string", "description": "NotionデータベースのID（空の場合は設定済みのDBを使用）"},
+                "title": {"type": "string", "description": "タスクのタイトル"},
+                "due_date": {"type": "string", "description": "期限 (YYYY-MM-DD形式)"},
+                "status": {"type": "string", "description": "ステータス名"}
             },
             "required": ["title"]
         }

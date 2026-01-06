@@ -29,12 +29,19 @@ interface Reminder {
   enabled: boolean;
 }
 
+interface NotionDatabase {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface Config {
   user_name: string;
   personality: string;
   knowledge_sources: KnowledgeSource[];
   reminders: Reminder[];
   master_prompt: string;
+  notion_databases: NotionDatabase[];
 }
 
 // --- Components ---
@@ -160,7 +167,8 @@ function App() {
     personality: '',
     knowledge_sources: [],
     reminders: [],
-    master_prompt: ''
+    master_prompt: '',
+    notion_databases: []
   });
 
   useEffect(() => {
@@ -434,6 +442,72 @@ function App() {
                           placeholder="Example: Use this for sales questions..."
                         />
                       </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Notion Databases Card */}
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-gray-400" />
+                <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Notion Databases</h2>
+              </div>
+              <button
+                onClick={() => {
+                  const id = prompt("NotionデータベースのIDを入力してください（URLの末尾32文字）：");
+                  if (id) {
+                    const name = prompt("このデータベースの名前を入力してください（例：仕事タスク）：") || "Notion DB";
+                    setConfig(prev => ({
+                      ...prev,
+                      notion_databases: [...prev.notion_databases, { id, name, description: "" }]
+                    }));
+                  }
+                }}
+                className="text-xs font-bold text-white bg-black px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1 shadow-sm"
+              >
+                <Plus className="w-3 h-3" /> Add Database
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {config.notion_databases.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl">
+                  <Database className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400 font-medium">Notionデータベースが登録されていません</p>
+                  <p className="text-xs text-gray-300 mt-1">「Add Database」から追加してください</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {config.notion_databases.map((db, index) => (
+                    <motion.div layout key={db.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <Database className="w-5 h-5 text-indigo-500" />
+                          <div>
+                            <h3 className="font-bold text-gray-800 text-sm">{db.name}</h3>
+                            <p className="text-[10px] text-gray-400 font-mono">ID: {db.id.slice(0, 8)}...</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setConfig(prev => ({ ...prev, notion_databases: prev.notion_databases.filter(d => d.id !== db.id) }))}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <input
+                        value={db.description}
+                        onChange={(e) => {
+                          const updated = [...config.notion_databases];
+                          updated[index] = { ...db, description: e.target.value };
+                          setConfig({ ...config, notion_databases: updated });
+                        }}
+                        className="w-full bg-gray-50 rounded-lg px-3 py-2 text-sm outline-none"
+                        placeholder="説明（例：仕事のタスク管理用）"
+                      />
                     </motion.div>
                   ))}
                 </div>

@@ -21,7 +21,8 @@ DEFAULT_CONFIG = {
             "enabled": True
         }
     ],
-    "master_prompt": ""  # Detailed instructions for AI behavior
+    "master_prompt": "",
+    "notion_databases": []  # List of {id, name, description}
 }
 
 _config_sheet_id = None  # Cache
