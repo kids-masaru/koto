@@ -276,6 +276,14 @@ def cron_job():
 @app.route('/api/config', methods=['GET', 'POST', 'OPTIONS'])
 def handle_config():
     """Get or update configuration"""
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     if request.method == 'GET':
         return json.dumps(load_config(), ensure_ascii=False), 200, {'Content-Type': 'application/json'}
     
@@ -292,6 +300,14 @@ def handle_config():
 @app.route('/api/folders', methods=['GET', 'OPTIONS'])
 def list_folders():
     """List Google Drive folders for selection (Navigation support)"""
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     query = request.args.get('q', '')
     parent_id = request.args.get('parentId')
     
