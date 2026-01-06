@@ -197,6 +197,10 @@ function App() {
       }
       if (!data.reminders) data.reminders = [];
 
+      // Ensure notion_databases and master_prompt exist
+      if (!data.notion_databases) data.notion_databases = [];
+      if (!data.master_prompt) data.master_prompt = '';
+
       setConfig(data);
     } catch (error) {
       console.error('Failed to fetch config', error);
