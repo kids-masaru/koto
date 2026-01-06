@@ -1,16 +1,8 @@
 {
     "crons": [
         {
-            "path": "/cron?slot=morning",
+            "path": "/cron",
             "schedule": "0 22 * * *"
-        },
-        {
-            "path": "/cron?slot=noon",
-            "schedule": "0 3 * * *"
-        },
-        {
-            "path": "/cron?slot=evening",
-            "schedule": "0 9 * * *"
         }
     ],
     "headers": [
