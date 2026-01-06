@@ -7,7 +7,7 @@ import axios from 'axios';
 // In development: use local backend
 // In production: use the deployed KOTO backend on Vercel
 const API_BASE = import.meta.env.PROD
-  ? 'https://koto-tan.vercel.app'  // KOTO's deployed URL
+  ? 'https://koto-seven.vercel.app'
   : 'http://localhost:8080';
 
 // --- Types ---
