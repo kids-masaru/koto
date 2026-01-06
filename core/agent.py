@@ -222,8 +222,20 @@ def get_gemini_response(user_id, user_message):
     if master_prompt.strip():
         master_prompt_section = f"\n\n【★マスタープロンプト（詳細な動作指示）★】\n{master_prompt}\n"
     
+    # Get personality customization
+    personality = config.get('personality', '')
+    personality_section = ""
+    if personality.strip():
+        personality_section = f"\n\n【★性格設定★】\n以下の性格・話し方でユーザーに接してください：\n{personality}\n"
+    
+    # Get user name for personalization
+    user_name = config.get('user_name', '')
+    user_name_section = ""
+    if user_name.strip():
+        user_name_section = f"\n\n【★ユーザー名★】\nあなたが仕えている人の名前は「{user_name}」です。親しみを込めて接してください。\n"
+    
     # Combine prompts
-    full_system_prompt = SYSTEM_PROMPT + knowledge_context + master_prompt_section
+    full_system_prompt = SYSTEM_PROMPT + personality_section + user_name_section + knowledge_context + master_prompt_section
     
     contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
     contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
