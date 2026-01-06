@@ -25,7 +25,8 @@ from tools.google_ops import search_drive
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for dashboard
+# Enable CORS for dashboard - allow all origins and handle preflight
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
 # LINE credentials
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
@@ -272,7 +273,7 @@ def cron_job():
     return f'Processed {len(users)} users', 200
 
 
-@app.route('/api/config', methods=['GET', 'POST'])
+@app.route('/api/config', methods=['GET', 'POST', 'OPTIONS'])
 def handle_config():
     """Get or update configuration"""
     if request.method == 'GET':
@@ -288,7 +289,7 @@ def handle_config():
         except Exception as e:
             return json.dumps({"error": str(e)}), 400, {'Content-Type': 'application/json'}
 
-@app.route('/api/folders', methods=['GET'])
+@app.route('/api/folders', methods=['GET', 'OPTIONS'])
 def list_folders():
     """List Google Drive folders for selection (Navigation support)"""
     query = request.args.get('q', '')
