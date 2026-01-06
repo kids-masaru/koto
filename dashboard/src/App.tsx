@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Save, Search, Folder, FolderOpen, ChevronRight, Loader2, Bot, Bell, User, Trash2, Database, Plus, Home, ArrowLeft } from 'lucide-react';
+import { Save, Folder, FolderOpen, ChevronRight, Loader2, Bot, Bell, User, Trash2, Database, Plus, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 
 // API Base URL
