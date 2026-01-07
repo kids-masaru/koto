@@ -12,4 +12,4 @@ COPY . ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run with gunicorn for production
-CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 2 --timeout 60 app:app
+CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 2 --timeout 120 app:app

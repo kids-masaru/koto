@@ -28,6 +28,13 @@ app = Flask(__name__)
 # Enable CORS for dashboard - allow all origins and handle preflight
 CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
+
+@app.route('/')
+def healthcheck():
+    """Health check endpoint for Railway/deployment platforms"""
+    return 'KOTO is running!', 200
+
+
 # LINE credentials
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
