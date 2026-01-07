@@ -19,13 +19,18 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 
-class GeminiEmbeddingFunction:
+try:
+    from chromadb import EmbeddingFunction, Documents, Embeddings
+except ImportError:
+    # Minimal stub if import fails during check
+    class EmbeddingFunction: pass
+    Documents = List[str]
+    Embeddings = List[List[float]]
+
+class GeminiEmbeddingFunction(EmbeddingFunction):
     """Custom embedding function using Gemini API"""
     
-    # Required by Chroma
-    name = "gemini_embedding"
-    
-    def __call__(self, input: List[str]) -> List[List[float]]:
+    def __call__(self, input: Documents) -> Embeddings:
         """Generate embeddings for a list of texts"""
         if not GEMINI_API_KEY:
             # Fallback: return simple hash-based embeddings
