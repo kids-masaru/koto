@@ -69,23 +69,17 @@ class GeminiEmbeddingFunction:
 
 def _get_collection():
     """Get or create Chroma collection (lazy load)"""
-    global _chroma_client, _collection
+    global _chroma_client, _collection, _init_error
     
     if _collection is not None:
         return _collection
     
     try:
         import chromadb
-        from chromadb.config import Settings
         
-        # Ensure data directory exists
-        os.makedirs(DATA_DIR, exist_ok=True)
-        
-        # Create persistent client
-        _chroma_client = chromadb.PersistentClient(
-            path=DATA_DIR,
-            settings=Settings(anonymized_telemetry=False)
-        )
+        # Use EphemeralClient for serverless environments (Railway)
+        # Data is in-memory and won't persist across restarts
+        _chroma_client = chromadb.EphemeralClient()
         
         # Get or create collection with Gemini embedding function
         _collection = _chroma_client.get_or_create_collection(
@@ -96,8 +90,12 @@ def _get_collection():
         
         return _collection
     except Exception as e:
+        _init_error = str(e)
         print(f"Error initializing Chroma: {e}", file=sys.stderr)
         return None
+
+# Store init error for debugging
+_init_error = None
 
 
 def save_conversation(user_id: str, role: str, text: str, metadata: Optional[Dict] = None) -> bool:
@@ -228,9 +226,10 @@ def get_context_summary(user_id: str, query: str, max_tokens: int = 500) -> str:
 
 def get_collection_stats() -> Dict:
     """Get statistics about the vector store"""
+    global _init_error
     collection = _get_collection()
     if collection is None:
-        return {"status": "not_initialized"}
+        return {"status": "not_initialized", "init_error": _init_error}
     
     try:
         count = collection.count()
