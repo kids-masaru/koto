@@ -256,8 +256,18 @@ def get_gemini_response(user_id, user_message):
     if user_name.strip():
         user_name_section = f"\n\n【★ユーザー名★】\nあなたが仕えている人の名前は「{user_name}」です。親しみを込めて接してください。\n"
     
-    # Combine prompts
-    full_system_prompt = SYSTEM_PROMPT + personality_section + user_name_section + knowledge_context + master_prompt_section
+    # RAG: Retrieve relevant past conversations
+    rag_context = ""
+    try:
+        from utils.vector_store import get_context_summary, save_conversation
+        rag_context = get_context_summary(user_id, user_message, max_tokens=300)
+        # Save user message to vector store
+        save_conversation(user_id, "user", user_message)
+    except Exception as e:
+        print(f"RAG context error: {e}", file=sys.stderr)
+    
+    # Combine prompts with RAG context
+    full_system_prompt = SYSTEM_PROMPT + personality_section + user_name_section + knowledge_context + master_prompt_section + rag_context
     
     # Build conversation contents
     contents = []
@@ -339,6 +349,12 @@ def get_gemini_response(user_id, user_message):
                         if 'text' in part:
                             response_text = part['text']
                             add_message(user_id, "model", response_text)
+                            # Save model response to vector store for RAG
+                            try:
+                                from utils.vector_store import save_conversation
+                                save_conversation(user_id, "model", response_text)
+                            except:
+                                pass
                             return response_text
             
             return '考えがまとまりませんでした...もう一度聞いてください。'
