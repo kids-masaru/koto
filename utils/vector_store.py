@@ -22,6 +22,9 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 class GeminiEmbeddingFunction:
     """Custom embedding function using Gemini API"""
     
+    # Required by Chroma
+    name = "gemini_embedding"
+    
     def __call__(self, input: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of texts"""
         if not GEMINI_API_KEY:
