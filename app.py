@@ -35,6 +35,18 @@ def healthcheck():
     return 'KOTO is running!', 200
 
 
+@app.route('/debug/vector-status')
+def vector_status():
+    """Debug endpoint to check vector store status"""
+    import json
+    try:
+        from utils.vector_store import get_collection_stats
+        stats = get_collection_stats()
+        return json.dumps(stats, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return json.dumps({"error": str(e)}), 500, {'Content-Type': 'application/json'}
+
+
 # LINE credentials
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
