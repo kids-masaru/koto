@@ -1,35 +1,70 @@
 """
 Vector Store - Chroma-based semantic memory for conversation history
 Enables RAG (Retrieval Augmented Generation) for KOTO
+Uses Gemini API for embeddings (lightweight alternative to sentence-transformers)
 """
 import os
 import sys
+import json
+import urllib.request
 from datetime import datetime
 from typing import List, Dict, Optional
 
 # Lazy loading to avoid slow startup
 _chroma_client = None
 _collection = None
-_embedding_function = None
 
 COLLECTION_NAME = "koto_conversations"
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "chroma")
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 
-def _get_embedding_function():
-    """Get or create embedding function (lazy load)"""
-    global _embedding_function
-    if _embedding_function is None:
-        try:
-            from chromadb.utils import embedding_functions
-            # Use sentence-transformers with a multilingual model for Japanese
-            _embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="paraphrase-multilingual-MiniLM-L12-v2"
-            )
-        except Exception as e:
-            print(f"Warning: Could not load embedding function: {e}", file=sys.stderr)
-            return None
-    return _embedding_function
+class GeminiEmbeddingFunction:
+    """Custom embedding function using Gemini API"""
+    
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        """Generate embeddings for a list of texts"""
+        if not GEMINI_API_KEY:
+            # Fallback: return simple hash-based embeddings
+            return [self._simple_embedding(text) for text in input]
+        
+        embeddings = []
+        for text in input:
+            try:
+                embedding = self._get_gemini_embedding(text)
+                embeddings.append(embedding)
+            except Exception as e:
+                print(f"Embedding error: {e}", file=sys.stderr)
+                embeddings.append(self._simple_embedding(text))
+        
+        return embeddings
+    
+    def _get_gemini_embedding(self, text: str) -> List[float]:
+        """Get embedding from Gemini API"""
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={GEMINI_API_KEY}"
+        
+        data = {
+            "model": "models/text-embedding-004",
+            "content": {"parts": [{"text": text[:2000]}]}  # Truncate to avoid token limits
+        }
+        
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as res:
+            result = json.loads(res.read().decode('utf-8'))
+            return result.get('embedding', {}).get('values', self._simple_embedding(text))
+    
+    def _simple_embedding(self, text: str) -> List[float]:
+        """Fallback: Simple hash-based embedding (768 dimensions)"""
+        import hashlib
+        # Create a deterministic but simple embedding
+        hash_bytes = hashlib.sha256(text.encode('utf-8')).digest() * 24  # 768 bytes
+        return [b / 255.0 for b in hash_bytes[:768]]
 
 
 def _get_collection():
@@ -52,20 +87,12 @@ def _get_collection():
             settings=Settings(anonymized_telemetry=False)
         )
         
-        # Get or create collection with embedding function
-        ef = _get_embedding_function()
-        if ef:
-            _collection = _chroma_client.get_or_create_collection(
-                name=COLLECTION_NAME,
-                embedding_function=ef,
-                metadata={"description": "KOTO conversation history for RAG"}
-            )
-        else:
-            # Fallback without custom embedding
-            _collection = _chroma_client.get_or_create_collection(
-                name=COLLECTION_NAME,
-                metadata={"description": "KOTO conversation history for RAG"}
-            )
+        # Get or create collection with Gemini embedding function
+        _collection = _chroma_client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            embedding_function=GeminiEmbeddingFunction(),
+            metadata={"description": "KOTO conversation history for RAG"}
+        )
         
         return _collection
     except Exception as e:
