@@ -1,52 +1,40 @@
 """
-Vector Store - Chroma-based semantic memory for conversation history
+Vector Store - Pinecone-based persistent memory for conversation history
 Enables RAG (Retrieval Augmented Generation) for KOTO
-Uses Gemini API for embeddings (lightweight alternative to sentence-transformers)
+Uses Gemini API for embeddings and Pinecone for storage
 """
 import os
 import sys
 import json
+import time
 import urllib.request
 from datetime import datetime
 from typing import List, Dict, Optional
 
 # Lazy loading to avoid slow startup
-_chroma_client = None
-_collection = None
+_pinecone_index = None
+_init_error = None
 
-COLLECTION_NAME = "koto_conversations"
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "chroma")
+INDEX_NAME = "koto-memory"
+DIMENSION = 768  # Gemini text-embedding-004 dimension
+PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', '')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 
-try:
-    from chromadb import EmbeddingFunction, Documents, Embeddings
-except ImportError:
-    # Minimal stub if import fails during check
-    class EmbeddingFunction: pass
-    Documents = List[str]
-    Embeddings = List[List[float]]
-
-class GeminiEmbeddingFunction(EmbeddingFunction):
-    """Custom embedding function using Gemini API"""
+class GeminiEmbedder:
+    """Helper class to get embeddings from Gemini API"""
     
-    def __call__(self, input: Documents) -> Embeddings:
-        """Generate embeddings for a list of texts"""
+    def embed_text(self, text: str) -> List[float]:
+        """Get embedding for a single text"""
         if not GEMINI_API_KEY:
-            # Fallback: return simple hash-based embeddings
-            return [self._simple_embedding(text) for text in input]
-        
-        embeddings = []
-        for text in input:
-            try:
-                embedding = self._get_gemini_embedding(text)
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Embedding error: {e}", file=sys.stderr)
-                embeddings.append(self._simple_embedding(text))
-        
-        return embeddings
-    
+            return self._simple_embedding(text)
+            
+        try:
+            return self._get_gemini_embedding(text)
+        except Exception as e:
+            print(f"Embedding error: {e}", file=sys.stderr)
+            return self._simple_embedding(text)
+
     def _get_gemini_embedding(self, text: str) -> List[float]:
         """Get embedding from Gemini API"""
         url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={GEMINI_API_KEY}"
@@ -65,7 +53,7 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
         
         with urllib.request.urlopen(req, timeout=10) as res:
             result = json.loads(res.read().decode('utf-8'))
-            return result.get('embedding', {}).get('values', self._simple_embedding(text))
+            return result.get('embedding', {}).get('values', [])
     
     def _simple_embedding(self, text: str) -> List[float]:
         """Fallback: Simple hash-based embedding (768 dimensions)"""
@@ -75,55 +63,61 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
         return [b / 255.0 for b in hash_bytes[:768]]
 
 
-def _get_collection():
-    """Get or create Chroma collection (lazy load)"""
-    global _chroma_client, _collection, _init_error
+def _get_index():
+    """Get or create Pinecone index (lazy load)"""
+    global _pinecone_index, _init_error
     
-    if _collection is not None:
-        return _collection
+    if _pinecone_index is not None:
+        return _pinecone_index
+        
+    if not PINECONE_API_KEY:
+        _init_error = "PINECONE_API_KEY not set"
+        return None
     
     try:
-        import chromadb
+        from pinecone import Pinecone, ServerlessSpec
         
-        # Use EphemeralClient for serverless environments (Railway)
-        # Data is in-memory and won't persist across restarts
-        _chroma_client = chromadb.EphemeralClient()
+        pc = Pinecone(api_key=PINECONE_API_KEY)
         
-        # Get or create collection with Gemini embedding function
-        _collection = _chroma_client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=GeminiEmbeddingFunction(),
-            metadata={"description": "KOTO conversation history for RAG"}
-        )
+        # Check if index exists
+        existing_indexes = pc.list_indexes().names()
         
-        return _collection
+        if INDEX_NAME not in existing_indexes:
+            # Create index if not exists
+            print(f"Creating Pinecone index: {INDEX_NAME}...", file=sys.stderr)
+            pc.create_index(
+                name=INDEX_NAME,
+                dimension=DIMENSION,
+                metric="cosine",
+                spec=ServerlessSpec(
+                    cloud="aws",
+                    region="us-east-1"
+                )
+            )
+            # Wait for index to be ready
+            while not pc.describe_index(INDEX_NAME).status['ready']:
+                time.sleep(1)
+        
+        _pinecone_index = pc.Index(INDEX_NAME)
+        return _pinecone_index
+        
     except Exception as e:
         _init_error = str(e)
-        print(f"Error initializing Chroma: {e}", file=sys.stderr)
+        print(f"Error initializing Pinecone: {e}", file=sys.stderr)
         return None
-
-# Store init error for debugging
-_init_error = None
 
 
 def save_conversation(user_id: str, role: str, text: str, metadata: Optional[Dict] = None) -> bool:
-    """
-    Save a conversation message to the vector store
-    
-    Args:
-        user_id: LINE user ID
-        role: 'user' or 'model'
-        text: Message content
-        metadata: Optional additional metadata
-    
-    Returns:
-        True if saved successfully, False otherwise
-    """
-    collection = _get_collection()
-    if collection is None:
+    """Save conversation message to Pinecone"""
+    index = _get_index()
+    if index is None:
         return False
     
     try:
+        # Generate embedding
+        embedder = GeminiEmbedder()
+        vector = embedder.embed_text(text)
+        
         # Create unique ID
         doc_id = f"{user_id}_{datetime.now().isoformat()}_{role}"
         
@@ -131,80 +125,59 @@ def save_conversation(user_id: str, role: str, text: str, metadata: Optional[Dic
         doc_metadata = {
             "user_id": user_id,
             "role": role,
+            "text": text, # Store text in metadata for retrieval
             "timestamp": datetime.now().isoformat(),
         }
         if metadata:
             doc_metadata.update(metadata)
         
-        # Add to collection
-        collection.add(
-            documents=[text],
-            metadatas=[doc_metadata],
-            ids=[doc_id]
-        )
+        # Upsert to Pinecone
+        index.upsert(vectors=[(doc_id, vector, doc_metadata)])
         
         return True
     except Exception as e:
-        print(f"Error saving to vector store: {e}", file=sys.stderr)
+        print(f"Error saving to Pinecone: {e}", file=sys.stderr)
         return False
 
 
 def search_relevant_context(user_id: str, query: str, n_results: int = 5) -> List[Dict]:
-    """
-    Search for relevant past conversations
-    
-    Args:
-        user_id: LINE user ID (for filtering)
-        query: Search query (current user message)
-        n_results: Number of results to return
-    
-    Returns:
-        List of relevant past messages with metadata
-    """
-    collection = _get_collection()
-    if collection is None:
+    """Search for relevant past conversations"""
+    index = _get_index()
+    if index is None:
         return []
     
     try:
-        # Search with user filter
-        results = collection.query(
-            query_texts=[query],
-            n_results=n_results,
-            where={"user_id": user_id}
+        # Generate embedding for query
+        embedder = GeminiEmbedder()
+        vector = embedder.embed_text(query)
+        
+        # Search Pinecone
+        results = index.query(
+            vector=vector,
+            top_k=n_results,
+            filter={"user_id": user_id},
+            include_metadata=True
         )
         
         # Format results
         relevant_context = []
-        if results and results['documents'] and results['documents'][0]:
-            for i, doc in enumerate(results['documents'][0]):
-                metadata = results['metadatas'][0][i] if results['metadatas'] else {}
-                distance = results['distances'][0][i] if results.get('distances') else None
-                
-                relevant_context.append({
-                    "text": doc,
-                    "role": metadata.get("role", "unknown"),
-                    "timestamp": metadata.get("timestamp", ""),
-                    "relevance": 1 - (distance or 0) if distance else 1  # Convert distance to similarity
-                })
+        for match in results.matches:
+            metadata = match.metadata or {}
+            relevant_context.append({
+                "text": metadata.get("text", ""),
+                "role": metadata.get("role", "unknown"),
+                "timestamp": metadata.get("timestamp", ""),
+                "relevance": match.score
+            })
         
         return relevant_context
     except Exception as e:
-        print(f"Error searching vector store: {e}", file=sys.stderr)
+        print(f"Error searching Pinecone: {e}", file=sys.stderr)
         return []
 
 
 def get_context_summary(user_id: str, query: str, max_tokens: int = 500) -> str:
-    """
-    Get a formatted summary of relevant past context for injection into AI prompt
-    
-    Args:
-        user_id: LINE user ID
-        query: Current user query
-        max_tokens: Approximate maximum length of summary
-    
-    Returns:
-        Formatted context string for AI prompt
-    """
+    """Get context summary for AI prompt"""
     relevant = search_relevant_context(user_id, query, n_results=5)
     
     if not relevant:
@@ -213,14 +186,19 @@ def get_context_summary(user_id: str, query: str, max_tokens: int = 500) -> str:
     # Build context summary
     context_parts = []
     total_chars = 0
-    max_chars = max_tokens * 3  # Rough estimate for Japanese
+    max_chars = max_tokens * 3
+    
+    # Sort by timestamp (oldest first) to maintain conversation flow
+    # or keep relevance order? Usually relevance is better for RAG, 
+    # but context flow is easier to read if sorted.
+    # Let's keep relevance for now as they are independent snippets.
     
     for item in relevant:
         if total_chars >= max_chars:
             break
         
         role_label = "ユーザー" if item["role"] == "user" else "KOTO"
-        text = item["text"][:200]  # Truncate long messages
+        text = item["text"][:200]
         
         entry = f"[{role_label}] {text}"
         context_parts.append(entry)
@@ -233,18 +211,20 @@ def get_context_summary(user_id: str, query: str, max_tokens: int = 500) -> str:
 
 
 def get_collection_stats() -> Dict:
-    """Get statistics about the vector store"""
+    """Get Pinecone index stats"""
     global _init_error
-    collection = _get_collection()
-    if collection is None:
+    index = _get_index()
+    
+    if index is None:
         return {"status": "not_initialized", "init_error": _init_error}
     
     try:
-        count = collection.count()
+        stats = index.describe_index_stats()
         return {
             "status": "ok",
-            "total_documents": count,
-            "collection_name": COLLECTION_NAME
+            "total_documents": stats.total_vector_count,
+            "collection_name": INDEX_NAME,
+            "provider": "pinecone"
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
