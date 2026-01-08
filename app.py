@@ -393,6 +393,44 @@ def handle_config():
         except Exception as e:
             return json.dumps({"error": str(e)}), 400, {'Content-Type': 'application/json'}
 
+@app.route('/api/profile', methods=['GET', 'POST', 'OPTIONS'])
+def handle_profile():
+    """Get or update User Profile (Psychological Data)"""
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
+    # Authenticate via config (simplified for single-user context)
+    # Ideally should get user_id from token, but we are using LINE user ID.
+    # We'll fetch the FIRST active user from user_db for dashboard purposes.
+    from utils.user_db import get_active_users
+    from utils.vector_store import get_user_profile, save_user_profile
+    
+    users = get_active_users()
+    if not users:
+        return json.dumps({"error": "No active users found"}), 404, {'Content-Type': 'application/json'}
+    
+    # Default to the first user found (Single user mode assumption)
+    target_user_id = request.args.get('user_id', users[0]['user_id'])
+    
+    if request.method == 'GET':
+        profile = get_user_profile(target_user_id)
+        return json.dumps(profile, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+        
+    elif request.method == 'POST':
+        try:
+            new_profile = request.json
+            if save_user_profile(target_user_id, new_profile):
+                return json.dumps({"success": True, "profile": new_profile}), 200, {'Content-Type': 'application/json'}
+            else:
+                return json.dumps({"error": "Failed to save profile"}), 500, {'Content-Type': 'application/json'}
+        except Exception as e:
+            return json.dumps({"error": str(e)}), 400, {'Content-Type': 'application/json'}
+
 @app.route('/api/folders', methods=['GET', 'OPTIONS'])
 def list_folders():
     """List Google Drive folders for selection (Navigation support)"""
