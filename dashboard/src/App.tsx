@@ -5,9 +5,9 @@ import axios from 'axios';
 
 // API Base URL
 // In development: use local backend
-// In production: use the deployed KOTO backend on Vercel
+// In production: use the deployed KOTO backend on Railway
 const API_BASE = import.meta.env.PROD
-  ? 'https://koto-seven.vercel.app'
+  ? 'https://web-production-25bb0.up.railway.app'
   : 'http://localhost:8080';
 
 // --- Types ---
