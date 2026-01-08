@@ -228,3 +228,59 @@ def get_collection_stats() -> Dict:
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+# --- Profile Persistence (Phase 5) ---
+
+def get_user_profile(user_id: str) -> Dict:
+    """Retrieve user profile from Pinecone (stored as special vector)"""
+    index = _get_index()
+    if index is None:
+        return {}
+        
+    try:
+        # Fetch by specific ID
+        profile_id = f"profile:{user_id}"
+        fetch_response = index.fetch(ids=[profile_id])
+        
+        if profile_id in fetch_response.vectors:
+            vector_data = fetch_response.vectors[profile_id]
+            # Profile data is stored in metadata['json_data'] as string
+            if vector_data.metadata and 'json_data' in vector_data.metadata:
+                return json.loads(vector_data.metadata['json_data'])
+                
+        return {}
+    except Exception as e:
+        print(f"Error fetching profile: {e}", file=sys.stderr)
+        return {}
+
+def save_user_profile(user_id: str, profile_data: Dict) -> bool:
+    """Save user profile to Pinecone"""
+    index = _get_index()
+    if index is None:
+        return False
+        
+    try:
+        profile_id = f"profile:{user_id}"
+        
+        # Serialize profile to JSON string
+        json_str = json.dumps(profile_data, ensure_ascii=False)
+        
+        # Use a dummy vector (all zeros) since we only care about metadata for this item
+        # But Pinecone requires a vector.
+        dummy_vector = [0.0] * DIMENSION
+        
+        # Upsert
+        index.upsert(vectors=[(
+            profile_id, 
+            dummy_vector, 
+            {
+                "type": "profile",
+                "user_id": user_id,
+                "timestamp": datetime.now().isoformat(),
+                "json_data": json_str # Store actual data here
+            }
+        )])
+        return True
+    except Exception as e:
+        print(f"Error saving profile: {e}", file=sys.stderr)
+        return False

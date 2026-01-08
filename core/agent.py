@@ -248,6 +248,24 @@ def get_gemini_response(user_id, user_message):
     personality = config.get('personality', '')
     personality_section = ""
     if personality.strip():
+        personality_section = f"あなたの性格: {personality}\n"
+        
+    # [Diff] Fetch User Profile (Phase 5)
+    from utils.vector_store import get_user_profile
+    user_profile = get_user_profile(user_id)
+    profile_section = ""
+    if user_profile and isinstance(user_profile, dict):
+        profile_section = f"""
+【★ユーザープロファイル（重要：あなたが知っているユーザー情報）★】
+名前: {user_profile.get('name', '不明')}
+性格・特徴: {', '.join(user_profile.get('personality_traits', []))}
+興味・関心: {', '.join(user_profile.get('interests', []))}
+価値観: {', '.join(user_profile.get('values', []))}
+現在の目標: {', '.join(user_profile.get('current_goals', []))}
+要約: {user_profile.get('summary', '')}
+
+あなたは、上記のプロファイルに基づき、ユーザー（{user_profile.get('name', 'ユーザー')}さん）を深く理解している秘書として振る舞ってください。
+"""
         personality_section = f"\n\n【★性格設定★】\n以下の性格・話し方でユーザーに接してください：\n{personality}\n"
     
     # Get user name for personalization
@@ -266,8 +284,8 @@ def get_gemini_response(user_id, user_message):
     except Exception as e:
         print(f"RAG context error: {e}", file=sys.stderr)
     
-    # Combine prompts with RAG context
-    full_system_prompt = SYSTEM_PROMPT + personality_section + user_name_section + knowledge_context + master_prompt_section + rag_context
+    # Combine prompts with RAG and Profile context
+    full_system_prompt = SYSTEM_PROMPT + personality_section + profile_section + user_name_section + knowledge_context + master_prompt_section + rag_context
     
     # Build conversation contents
     contents = []

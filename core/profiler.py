@@ -122,26 +122,13 @@ class ProfilerAgent:
             return current_profile
 
     def _load_current_profile(self, user_id: str) -> Dict:
-        """Load from local JSON file (simulated DB)"""
-        try:
-            with open(PROFILE_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data.get(user_id, {})
-        except FileNotFoundError:
-            return {}
+        """Load from persistent vector store"""
+        from utils.vector_store import get_user_profile
+        return get_user_profile(user_id)
 
     def _save_profile(self, user_id: str, profile: Dict):
-        """Save to local JSON file"""
-        all_data = {}
-        try:
-            with open(PROFILE_FILE, 'r', encoding='utf-8') as f:
-                all_data = json.load(f)
-        except FileNotFoundError:
-            pass
-            
-        all_data[user_id] = profile
-        
-        with open(PROFILE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(all_data, f, ensure_ascii=False, indent=2)
+        """Save to persistent vector store"""
+        from utils.vector_store import save_user_profile
+        save_user_profile(user_id, profile)
 
 profiler = ProfilerAgent()
