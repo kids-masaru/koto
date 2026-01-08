@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Save, Folder, FolderOpen, ChevronRight, Loader2, Bot, Bell, User, Trash2, Database, Plus, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
+import { ProfileEditor } from './components/ProfileEditor';
 
 // API Base URL
 // In development: use local backend
@@ -307,6 +308,9 @@ function App() {
               <p className="text-xs text-gray-400 mt-2">※ここに詳細な動作指示を書くことで、AIがより正確にフォルダを検索・参照します。</p>
             </div>
           </section>
+
+          {/* [NEW] AI Profile Editor (Mental Model) */}
+          <ProfileEditor />
 
           {/* 2. Reminders Card */}
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
