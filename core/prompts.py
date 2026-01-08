@@ -50,6 +50,7 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「やること教えて」「ToDo確認」→ 必ず list_tasks を呼び出す
 - 「Notionのタスク」「Notionから予定」→ 必ず list_notion_tasks を呼び出す
 - 「Notionにタスク追加」「Notionに登録」→ 必ず create_notion_task を呼び出す
+- 「資料まとめて」「議事録要約」「リサーチして」→ delegate_to_maker を呼び出す
 
 ツールを呼び出さずに「検索結果」や「計算結果」を想像で答えることは絶対に禁止です。
 ツールの実行に失敗した場合は、正直に「エラーで実行できませんでした」と伝えてください。嘘の成功報告は禁止です。
@@ -288,6 +289,17 @@ TOOLS = [
                 "status": {"type": "string", "description": "ステータス名"}
             },
             "required": ["title"]
+        }
+    },
+    {
+        "name": "delegate_to_maker",
+        "description": "「資料作成」「要約」「リサーチ」などの依頼を、『Maker Agent (資料作成専門家)』に委任します。ドライブ内の複数ファイルを読んでまとめたり、長文のドキュメントを作成する場合に使います。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "request": {"type": "string", "description": "Makerへの具体的な指示内容（例: '今月の会議議事録を検索して要約を作成して'）"}
+            },
+            "required": ["request"]
         }
     }
 ]

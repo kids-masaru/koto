@@ -3,6 +3,7 @@ Google Workspace operations - Docs, Sheets, Slides, Drive, Gmail
 """
 import sys
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from utils.auth import get_google_credentials, get_shared_folder_id
 
 
@@ -382,3 +383,73 @@ def get_gmail_body(message_id: str):
         return {"error": f"メール本文取得中にエラーが発生しました: {str(e)}"}
 
 
+
+# Need fast import for fitz, but it might be heavy, so import inside function or at top
+import io
+
+def read_drive_file(file_id: str):
+    """
+    Read content from a Google Drive file (Google Doc, PDF, or Text).
+    Returns text content.
+    """
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # 1. Get file metadata
+        file = drive_service.files().get(fileId=file_id, fields='name, mimeType').execute()
+        mime_type = file.get('mimeType')
+        name = file.get('name')
+        
+        content = ""
+        
+        if mime_type == 'application/vnd.google-apps.document':
+            # Export Google Doc to Text
+            request = drive_service.files().export_media(
+                fileId=file_id,
+                mimeType='text/plain'
+            )
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            content = fh.getvalue().decode('utf-8')
+            
+        elif mime_type == 'application/pdf':
+            # Download PDF and extract text
+            request = drive_service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            
+            # Extract text using PyMuPDF
+            import fitz
+            pdf_data = fh.getvalue()
+            doc = fitz.open(stream=pdf_data, filetype="pdf")
+            for page in doc:
+                content += page.get_text() + "\n"
+                
+        elif mime_type == 'text/plain':
+            # Download Text file
+            request = drive_service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            content = fh.getvalue().decode('utf-8')
+            
+        else:
+            return {"error": f"未対応のファイル形式です: {mime_type}"}
+            
+        return {"success": True, "title": name, "content": content}
+        
+    except Exception as e:
+        print(f"Read Drive file error: {e}", file=sys.stderr)
+        return {"error": f"ファイル読み込み中にエラーが発生しました: {str(e)}"}

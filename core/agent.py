@@ -100,6 +100,10 @@ def execute_tool(tool_name, args, user_id=None):
             if notion_dbs:
                 database_id = notion_dbs[0].get("id", "")
         return create_notion_task(database_id, args.get("title", ""), args.get("due_date"), args.get("status"))
+    elif tool_name == "delegate_to_maker":
+        from core.maker import maker
+        response_text = maker.run(args.get("request", ""))
+        return {"report": response_text}
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -204,6 +208,9 @@ def format_tool_result(tool_name, result):
     elif tool_name == "add_task":
         t = result.get("task", {})
         return f"ToDoを追加しました！✨\n\n📝 {t.get('title', '')}"
+
+    elif tool_name == "delegate_to_maker":
+        return f"Make Agentにお願いしてきました！👩‍💻\n\n{result.get('report', '')}"
     
     return json.dumps(result, ensure_ascii=False)
 
