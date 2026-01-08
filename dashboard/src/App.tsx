@@ -42,6 +42,7 @@ interface Config {
   knowledge_sources: KnowledgeSource[];
   reminders: Reminder[];
   master_prompt: string;
+  profiler_prompt?: string;
   notion_databases: NotionDatabase[];
 }
 
@@ -295,17 +296,34 @@ function App() {
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
               <Bot className="w-4 h-4 text-gray-400" />
-              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">マスタープロンプト</h2>
+              <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">Agent Prompts</h2>
             </div>
-            <div className="p-6">
-              <textarea
-                value={config.master_prompt}
-                onChange={e => setConfig({ ...config, master_prompt: e.target.value })}
-                className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
-                rows={6}
-                placeholder="例：&#10;山崎について聞かれたら → 山崎フォルダ → 録音記録 → テキストファイルを見る&#10;マミルの次にやることは？ → マミルフォルダ → 録音記録 → テキストを確認&#10;..."
-              />
-              <p className="text-xs text-gray-400 mt-2">※ここに詳細な動作指示を書くことで、AIがより正確にフォルダを検索・参照します。</p>
+            <div className="p-6 space-y-6">
+              {/* KOTO Master Prompt */}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">KOTO (Main Agent)</label>
+                <textarea
+                  value={config.master_prompt}
+                  onChange={e => setConfig({ ...config, master_prompt: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
+                  rows={6}
+                  placeholder="例：&#10;山崎について聞かれたら → 山崎フォルダ → 録音記録 → テキストファイルを見る&#10;マミルの次にやることは？ → マミルフォルダ → 録音記録 → テキストを確認&#10;..."
+                />
+                <p className="text-xs text-gray-400 mt-2">※KOTOへの詳細な動作指示（フォルダ検索のヒントなど）</p>
+              </div>
+
+              {/* Profiler Prompt */}
+              <div className="border-t border-gray-100 pt-6">
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Profiler (Biographer)</label>
+                <textarea
+                  value={config.profiler_prompt || ''}
+                  onChange={e => setConfig({ ...config, profiler_prompt: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
+                  rows={6}
+                  placeholder="Profilerのシステムプロンプト（空欄の場合はデフォルトが使用されます）"
+                />
+                <p className="text-xs text-gray-400 mt-2">※夜間に起動し、あなたのログを分析してプロファイルを更新するエージェントへの指示</p>
+              </div>
             </div>
           </section>
 

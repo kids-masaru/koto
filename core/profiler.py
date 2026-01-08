@@ -84,15 +84,13 @@ class ProfilerAgent:
         logs_text = "\n".join([f"- {log}" for log in logs])
         current_profile_str = json.dumps(current_profile, ensure_ascii=False, indent=2)
         
-        prompt = f"""
+        # Get prompt from config or use default
+        from utils.sheets_config import load_config
+        config = load_config()
+        
+        system_prompt = config.get('profiler_prompt', """
         あなたは「伝記作家」です。
         対象人物（ユーザー）の会話記録（Log）を読み、現在の人物プロファイル（Profile）を更新してください。
-        
-        【現在のプロファイル】
-        {current_profile_str}
-        
-        【新しい会話記録（断片）】
-        {logs_text}
         
         【指示】
         1. 新しい会話から読み取れる「性格」「興味関心」「価値観」「悩み」「目標」を抽出してください。
@@ -108,6 +106,16 @@ class ProfilerAgent:
             "current_goals": ["目標1", ...],
             "summary": "人物像の簡潔な要約（200文字以内）"
         }}
+        """)
+
+        prompt = f"""
+        {system_prompt}
+        
+        【現在のプロファイル】
+        {current_profile_str}
+        
+        【新しい会話記録（断片）】
+        {logs_text}
         """
         
         try:
