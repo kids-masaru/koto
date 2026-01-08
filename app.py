@@ -236,97 +236,109 @@ def webhook():
     # Return immediately - processing happens in background
     return 'OK', 200
 
-@app.route('/cron', methods=['GET'])
-def cron_job():
-    """Daily Cron Job - Send Morning Updates"""
-    # Verify Cron Secret
-    cron_secret = os.environ.get('CRON_SECRET')
-    auth_header = request.headers.get('Authorization')
+# Initialize Scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
+
+def check_reminders():
+    """Scheduled job to check and send reminders"""
+    # Use existing cron logic but internalize the context
+    with app.app_context():
+        try:
+            # Reusing the logic from the old route, but suited for internal execution
+            from utils.user_db import get_active_users
+            users = get_active_users()
+            print(f"Scheduler: Checking reminders for {len(users)} users...", file=sys.stderr)
+            
+            for user in users:
+                process_user_reminders(user)
+                
+        except Exception as e:
+            print(f"Scheduler Error: {e}", file=sys.stderr)
+
+def process_user_reminders(user):
+    """Process reminders for a single user"""
+    user_id = user['user_id']
+    location = user['location']
     
-    if cron_secret and (not auth_header or auth_header != f"Bearer {cron_secret}"):
-        return 'Unauthorized', 401
+    auth_config = load_config() # Ideally load user-specific config
+    reminders = auth_config.get('reminders', [])
     
-    from utils.user_db import get_active_users
+    # Fallback for old format
+    if not reminders and auth_config.get('reminder_time'):
+         reminders = [{
+            'name': '朝のリマインダー',
+            'time': auth_config.get('reminder_time', '07:00'),
+            'prompt': auth_config.get('reminder_prompt', '今日の天気と予定を教えて'),
+            'enabled': True
+        }]
+
+    from datetime import datetime, timezone, timedelta
+    jst = timezone(timedelta(hours=9))
+    now = datetime.now(jst)
+    current_hour = now.hour
+    current_minute = now.minute
     
-    users = get_active_users()
-    print(f"Cron started. Users to notify: {len(users)}", file=sys.stderr)
+    for reminder in reminders:
+        if not reminder.get('enabled', True): continue
+        
+        # Simple hour checks for now (can enhance to minute level)
+        r_time = reminder.get('time', '07:00')
+        try:
+            r_hour = int(r_time.split(':')[0])
+        except:
+            r_hour = 7
+            
+        if r_hour != current_hour: continue
+        
+        # Prevent double sending if checked multiple times in same hour?
+        # For now, scheduler runs hourly so it should be fine.
+        
+        send_reminder(user_id, location, reminder)
+
+def send_reminder(user_id, location, reminder):
+    prompt = (
+        f"今日の{location}の{reminder.get('prompt')}\n"
+        "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
+        "1. 天気に関する情報\n"
+        "2. スケジュール・タスクに関する情報\n"
+        "3. 気の利いた一言メッセージ"
+    )
     
-    for user in users:
-        user_id = user['user_id']
-        location = user['location']
+    try:
+        response = get_gemini_response(user_id, prompt)
+        messages = [msg.strip() for msg in response.split('@@@') if msg.strip()]
         
-        # Load user-specific config (or global config for now)
-        user_config = load_config()
-        
-        # Get reminders array (new format) or fallback to old format
-        reminders = user_config.get('reminders', [])
-        
-        # Fallback: if no reminders but old format exists, convert it
-        if not reminders and user_config.get('reminder_time'):
-            reminders = [{
-                'name': '朝のリマインダー',
-                'time': user_config.get('reminder_time', '07:00'),
-                'prompt': user_config.get('reminder_prompt', '今日の天気と予定を教えて'),
-                'enabled': True
-            }]
-        
-        # Get current time in JST
+        # Add greeting
         from datetime import datetime, timezone, timedelta
         jst = timezone(timedelta(hours=9))
-        now = datetime.now(jst)
-        current_hour = now.hour
-        
-        # Determine which reminders should fire based on current hour
-        # We check if the reminder time's hour matches current hour
-        for reminder in reminders:
-            if not reminder.get('enabled', True):
-                continue
+        h = datetime.now(jst).hour
+        if messages:
+            if h < 12 and "おはよう" not in messages[0]:
+                messages[0] = f"おはようございます！☀️\n\n{messages[0]}"
+            elif h >= 18 and "こんばんは" not in messages[0]:
+                messages[0] = f"こんばんは！🌙\n\n{messages[0]}"
+        else:
+            messages = [response]
             
-            reminder_time = reminder.get('time', '07:00')
-            try:
-                reminder_hour = int(reminder_time.split(':')[0])
-            except:
-                reminder_hour = 7
-            
-            # Check if this reminder should fire now (within the same hour)
-            if reminder_hour != current_hour:
-                continue
-            
-            base_prompt = reminder.get('prompt', '今日の天気と予定を教えて')
-            
-            # Build prompt with location and formatting instructions
-            prompt = (
-                f"今日の{location}の{base_prompt}\n"
-                "【重要】以下の3つのセクションに分けて、それぞれの間に「@@@」という区切り文字を入れて出力してください。\n"
-                "1. 天気に関する情報\n"
-                "2. スケジュール・タスクに関する情報\n"
-                "3. 気の利いた一言メッセージ"
-            )
-            print(f"Generating report for {user_id[:8]} ({location}) - {reminder.get('name', 'Reminder')}...", file=sys.stderr)
-        
-            try:
-                # Use get_gemini_response directly to leverage existing tool logic
-                response = get_gemini_response(user_id, prompt)
-                
-                # Split response by delimiter
-                messages = [msg.strip() for msg in response.split('@@@') if msg.strip()]
-                
-                # Add greeting to the first message if not present
-                if messages:
-                    if current_hour < 12 and "おはよう" not in messages[0]:
-                        messages[0] = f"おはようございます！☀️\n\n{messages[0]}"
-                    elif current_hour >= 18 and "こんばんは" not in messages[0]:
-                        messages[0] = f"こんばんは！🌙\n\n{messages[0]}"
-                else:
-                    # Fallback if split fails
-                    messages = [response]
-                
-                push_message(user_id, messages)
-                print(f"Sent report to {user_id[:8]} ({reminder.get('name', 'Reminder')})", file=sys.stderr)
-            except Exception as e:
-                print(f"Error processing user {user_id[:8]}: {e}", file=sys.stderr)
-            
-    return f'Processed {len(users)} users', 200
+        push_message(user_id, messages)
+        print(f"Sent reminder to {user_id[:8]}", file=sys.stderr)
+    except Exception as e:
+        print(f"Failed to send reminder: {e}", file=sys.stderr)
+
+
+# Start Scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_reminders, trigger="cron", hour="*", minute=0) # Run every hour on the hour
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
+
+
+@app.route('/cron', methods=['GET'])
+def cron_job():
+    """Manual trigger for reminders (Legacy/Debug)"""
+    check_reminders()
+    return 'Reminders checked manually', 200
 
 
 @app.route('/api/config', methods=['GET', 'POST', 'OPTIONS'])
