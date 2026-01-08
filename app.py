@@ -330,6 +330,28 @@ def send_reminder(user_id, location, reminder):
 # Start Scheduler
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_reminders, trigger="cron", hour="*", minute=0) # Run every hour on the hour
+
+# Profiler Job (Run daily at 3 AM JST = 18:00 UTC)
+def run_profiler():
+    """Run profiler for all active users"""
+    with app.app_context():
+        try:
+            from core.profiler import profiler
+            from utils.user_db import get_active_users
+            
+            users = get_active_users()
+            print(f"Profiler: Starting daily analysis for {len(users)} users...", file=sys.stderr)
+            
+            for user in users:
+                user_id = user['user_id']
+                # Run profile analysis
+                profiler.run_analysis(user_id)
+                
+        except Exception as e:
+            print(f"Profiler Job Error: {e}", file=sys.stderr)
+
+scheduler.add_job(func=run_profiler, trigger="cron", hour=18) # 18:00 UTC = 03:00 JST
+
 scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
@@ -339,6 +361,12 @@ def cron_job():
     """Manual trigger for reminders (Legacy/Debug)"""
     check_reminders()
     return 'Reminders checked manually', 200
+
+@app.route('/debug/run-profiler', methods=['POST'])
+def debug_run_profiler():
+    """Manual trigger for profiler"""
+    run_profiler()
+    return 'Profiler triggered', 200
 
 
 @app.route('/api/config', methods=['GET', 'POST', 'OPTIONS'])
