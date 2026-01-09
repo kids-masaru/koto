@@ -7,7 +7,8 @@ import json
 from google.oauth2 import service_account
 
 # Google Workspace credentials
-GOOGLE_SERVICE_ACCOUNT_KEY = os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY', '{}')
+# Try both common variable names
+GOOGLE_SERVICE_ACCOUNT_KEY = os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY') or os.environ.get('GOOGLE_CREDENTIALS', '{}')
 GOOGLE_DELEGATED_USER = os.environ.get('GOOGLE_DELEGATED_USER', '')
 GOOGLE_DRIVE_FOLDER_ID = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
 
