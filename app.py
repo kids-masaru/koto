@@ -138,38 +138,94 @@ def reply_message(reply_token, text):
         print(f"Reply error: {e}", file=sys.stderr)
 
 
-def process_message_async(user_id, user_text, reply_token=None):
-    """Process message in background and send response via Reply/Push API"""
+def get_line_message_content(message_id):
+    """Download message content (image/file) from LINE"""
+    # Note: Use api-data.line.me for content
+    url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
+    headers = {
+        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+    }
+    
+    req = urllib.request.Request(url, headers=headers)
     try:
-        print(f"Processing message from {user_id[:8]}: {user_text}", file=sys.stderr)
+        with urllib.request.urlopen(req) as res:
+            return res.read()
+    except Exception as e:
+        print(f"Content download error: {e}", file=sys.stderr)
+        return None
+
+
+def process_message_async(user_id, user_text, reply_token=None, message_id=None, message_type='text', filename=None):
+    """Process message (text or file) in background"""
+    try:
+        print(f"Processing {message_type} from {user_id[:8]}", file=sys.stderr)
         
+        # Handle File Uploads
+        if message_type in ['image', 'file']:
+            reply_token_used = False
+            
+            # 1. Download from LINE
+            content = get_line_message_content(message_id)
+            if not content:
+                if reply_token:
+                    reply_message(reply_token, "ごめんなさい、ファイルのダウンロードに失敗しました...😢")
+                return
+
+            # 2. Determine filename
+            if not filename:
+                import datetime
+                ext = 'jpg' if message_type == 'image' else 'dat'
+                timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"line_{timestamp}.{ext}"
+
+            # 3. Upload to Drive
+            from tools.google_ops import upload_file_to_drive
+            mime = 'image/jpeg' if message_type == 'image' else None # Auto-detect for others
+            
+            result = upload_file_to_drive(filename, content, mime_type=mime)
+            
+            if result.get("success"):
+                file_url = result.get("url")
+                # User didn't say anything, but the act of uploading is the message.
+                # format as a system notification to the agent
+                user_text = f"【システム通知】ユーザーがファイルをアップロードしました。\nファイル名: {filename}\n保存先URL: {file_url}\n(このファイルの内容について聞かれたら Maker Agent 等を使ってください)"
+                
+                # Notify user immediately (Optional, but good UX)
+                # But we want KOTO to reply naturally, so maybe let KOTO generate the reply.
+                # However, KOTO might take time. Let's rely on KOTO.
+            else:
+                error = result.get("error", "Unknown error")
+                if reply_token:
+                    reply_message(reply_token, f"ドライブへの保存に失敗しました...😢\n{error}")
+                return
+
+        # Normal Agent Flow (Text or converted System Text)
+        print(f"Agent Input: {user_text}", file=sys.stderr)
         ai_response = get_gemini_response(user_id, user_text)
         
         print(f"Koto response: {ai_response[:100]}...", file=sys.stderr)
         
-        # Try Reply API first (Free, but token expires in ~30s)
+        # Try Reply API first
         success = False
         if reply_token:
             try:
                 reply_message(reply_token, ai_response)
                 success = True
             except Exception as e:
-                print(f"Reply failed (likely timeout), trying Push: {e}", file=sys.stderr)
+                 # Token might have expired during upload/processing
+                print(f"Reply failed, trying Push: {e}", file=sys.stderr)
         
-        # Fallback to Push API (Quota limited)
+        # Fallback to Push
         if not success:
             push_message(user_id, ai_response)
             
     except Exception as e:
         print(f"Async processing error: {e}", file=sys.stderr)
-        # Try to send error message
         try:
-            if reply_token:
-                reply_message(reply_token, "ごめんなさい、エラーが出ちゃいました...😢\nもう一度試してもらえますか？")
-            else:
-                push_message(user_id, "ごめんなさい、エラーが出ちゃいました...😢\nもう一度試してもらえますか？")
-        except Exception:
+            push_message(user_id, "ごめんなさい、エラーが出ちゃいました...😢")
+        except:
             pass
+
 
 
 @app.route('/', methods=['GET'])
@@ -202,20 +258,23 @@ def webhook():
             message = event.get('message', {})
             message_type = message.get('type')
             
+            reply_token = event.get('replyToken')
+            
             if message_type == 'text':
                 user_text = message.get('text', '')
-                reply_token = event.get('replyToken')
-                
-                print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
-                
-            if message_type == 'text':
-                user_text = message.get('text', '')
-                reply_token = event.get('replyToken')
-                
-                print(f"User [{user_id[:8]}]: {user_text}", file=sys.stderr)
-                
-                # Process synchronously (Vercel/Serverless does not support background threads after response)
+                print(f"User Text [{user_id[:8]}]: {user_text}", file=sys.stderr)
                 process_message_async(user_id, user_text, reply_token)
+                
+            elif message_type == 'image':
+                message_id = message.get('id')
+                print(f"User Image [{user_id[:8]}] ID: {message_id}", file=sys.stderr)
+                process_message_async(user_id, "", reply_token, message_id=message_id, message_type='image')
+                
+            elif message_type == 'file':
+                message_id = message.get('id')
+                filename = message.get('fileName')
+                print(f"User File [{user_id[:8]}] Name: {filename}", file=sys.stderr)
+                process_message_async(user_id, "", reply_token, message_id=message_id, message_type='file', filename=filename)
         
         elif event_type == 'follow':
             reply_token = event.get('replyToken')

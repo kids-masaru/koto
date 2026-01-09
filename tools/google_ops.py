@@ -453,3 +453,42 @@ def read_drive_file(file_id: str):
     except Exception as e:
         print(f"Read Drive file error: {e}", file=sys.stderr)
         return {"error": f"ファイル読み込み中にエラーが発生しました: {str(e)}"}
+
+
+from googleapiclient.http import MediaIoBaseUpload
+
+def upload_file_to_drive(filename: str, file_data: bytes, mime_type: str = None) -> dict:
+    """
+    Upload a file (bytes) to the shared Google Drive folder.
+    """
+    try:
+        creds = get_google_credentials()
+        if not creds:
+            return {"error": "Google認証に失敗しました。"}
+        
+        drive_service = build('drive', 'v3', credentials=creds)
+        folder_id = get_shared_folder_id()
+        
+        file_metadata = {'name': filename}
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+            
+        media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype=mime_type, resumable=True)
+        
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink',
+            supportsAllDrives=True
+        ).execute()
+        
+        return {
+            "success": True, 
+            "file_id": file.get('id'), 
+            "url": file.get('webViewLink'),
+            "filename": filename
+        }
+        
+    except Exception as e:
+        print(f"Upload error: {e}", file=sys.stderr)
+        return {"error": f"アップロード中にエラーが発生しました: {str(e)}"}
