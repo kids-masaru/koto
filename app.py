@@ -136,6 +136,7 @@ def reply_message(reply_token, text):
             print(f"Reply sent: {res.status}", file=sys.stderr)
     except Exception as e:
         print(f"Reply error: {e}", file=sys.stderr)
+        raise e # Re-raise to trigger fallback to Push in caller
 
 
 def get_line_message_content(message_id):
