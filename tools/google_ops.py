@@ -400,7 +400,11 @@ def read_drive_file(file_id: str):
         drive_service = build('drive', 'v3', credentials=creds)
         
         # 1. Get file metadata
-        file = drive_service.files().get(fileId=file_id, fields='name, mimeType').execute()
+        file = drive_service.files().get(
+            fileId=file_id, 
+            fields='name, mimeType',
+            supportsAllDrives=True
+        ).execute()
         mime_type = file.get('mimeType')
         name = file.get('name')
         
