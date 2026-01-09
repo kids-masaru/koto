@@ -462,17 +462,34 @@ def upload_file_to_drive(filename: str, file_data: bytes, mime_type: str = None)
     Upload a file (bytes) to the shared Google Drive folder.
     """
     try:
+        print(f"upload_file_to_drive: filename={filename}, mime={mime_type}, data_type={type(file_data)}", file=sys.stderr)
+        
+        if file_data is None:
+            return {"error": "アップロードデータが空です (None)"}
+            
+        if not isinstance(file_data, bytes):
+            # Try to encode if it's string (shouldn't happen but defensive)
+            if isinstance(file_data, str):
+                file_data = file_data.encode('utf-8')
+            else:
+                 return {"error": f"データの形式が不正です: {type(file_data)}"}
+
         creds = get_google_credentials()
         if not creds:
-            return {"error": "Google認証に失敗しました。"}
+             # Try to print why
+             print("get_google_credentials returned None", file=sys.stderr)
+             return {"error": "Google認証に失敗しました。"}
         
         drive_service = build('drive', 'v3', credentials=creds)
         folder_id = get_shared_folder_id()
+        print(f"Target folder: {folder_id}", file=sys.stderr)
         
         file_metadata = {'name': filename}
         if folder_id:
             file_metadata['parents'] = [folder_id]
             
+        # Use resumable=True for large files, but for small ones False might be safer if network is flaky?
+        # Default True is fine.
         media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype=mime_type, resumable=True)
         
         file = drive_service.files().create(
@@ -490,5 +507,7 @@ def upload_file_to_drive(filename: str, file_data: bytes, mime_type: str = None)
         }
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Upload error: {e}", file=sys.stderr)
         return {"error": f"アップロード中にエラーが発生しました: {str(e)}"}

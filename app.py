@@ -167,21 +167,31 @@ def process_message_async(user_id, user_text, reply_token=None, message_id=None,
             # 1. Download from LINE
             content = get_line_message_content(message_id)
             if not content:
+                print(f"Content download failed for {message_id}", file=sys.stderr)
                 if reply_token:
                     reply_message(reply_token, "ごめんなさい、ファイルのダウンロードに失敗しました...😢")
                 return
+            
+            print(f"Downloaded content: {len(content)} bytes type: {type(content)}", file=sys.stderr)
 
             # 2. Determine filename
+            import datetime
+            import mimetypes
+            
             if not filename:
-                import datetime
                 ext = 'jpg' if message_type == 'image' else 'dat'
                 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
                 filename = f"line_{timestamp}.{ext}"
 
             # 3. Upload to Drive
             from tools.google_ops import upload_file_to_drive
-            mime = 'image/jpeg' if message_type == 'image' else None # Auto-detect for others
             
+            # Detect MIME
+            mime = 'image/jpeg' if message_type == 'image' else None 
+            if not mime:
+                mime, _ = mimetypes.guess_type(filename)
+            
+            print(f"Uploading {filename} (mime={mime})", file=sys.stderr)
             result = upload_file_to_drive(filename, content, mime_type=mime)
             
             if result.get("success"):
