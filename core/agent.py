@@ -20,6 +20,7 @@ def execute_tool(tool_name, args, user_id=None):
     # Import tools here to avoid circular imports
     from tools.basic_ops import calculate, calculate_date, search_and_read_pdf
     from tools.web_ops import google_web_search, fetch_url
+    from tools.weather import get_current_weather
     from tools.google_ops import (
         create_google_doc, create_google_sheet, create_google_slide,
         search_drive, list_gmail, get_gmail_body,
@@ -42,6 +43,10 @@ def execute_tool(tool_name, args, user_id=None):
         return google_web_search(
             args.get("query", ""),
             args.get("num_results", 5)
+        )
+    elif tool_name == "get_current_weather":
+        return get_current_weather(
+            args.get("location_name", "Tokyo")
         )
     elif tool_name == "fetch_url":
         return fetch_url(args.get("url", ""))

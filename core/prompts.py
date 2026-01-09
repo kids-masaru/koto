@@ -37,7 +37,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 【★重要★ ツールの使用ルール】
 以下の場合は、必ず対応するツールを呼び出してください。自分で回答を作らないでください。
 
-- 「調べて」「検索して」「ニュース」「天気」→ 必ず google_web_search を呼び出す
+- 「調べて」「検索して」「ニュース」→ 必ず google_web_search を呼び出す
+- 「天気」「気温」「服装」→ 必ず get_current_weather を呼び出す
 - 「計算して」「いくら」「何円」→ 必ず calculate を呼び出す
 - 「今日」「何曜日」「N日後」→ 必ず calculate_date を呼び出す
 - 「ドキュメント作って」→ 必ず create_google_doc を呼び出す
@@ -109,6 +110,17 @@ TOOLS = [
                 "query": {"type": "string", "description": "検索キーワード（ファイル名）"}
             },
             "required": ["query"]
+        }
+    },
+    {
+        "name": "get_current_weather",
+        "description": "特定の場所の天気、気温、降水確率を調べます。服装のアドバイスや天気予報を聞かれた時に使います。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location_name": {"type": "string", "description": "地名 (例: 東京, 大阪, 北海道)"}
+            },
+            "required": ["location_name"]
         }
     },
     {
