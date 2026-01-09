@@ -246,10 +246,22 @@ def list_calendar_events(query=None, time_min=None, time_max=None):
         
         service = build('calendar', 'v3', credentials=creds)
         
-        # Default to now if not specified
+        # Helper to ensure RFC3339 format with Timezone
+        def ensure_rfc3339(t_str):
+            if not t_str: return None
+            if 'T' in t_str and ('+' not in t_str and 'Z' not in t_str[-1]):
+                return t_str + '+09:00' # Assume JST if no timezone
+            return t_str
+
+        time_min = ensure_rfc3339(time_min)
+        time_max = ensure_rfc3339(time_max)
+        
+        # Default to now (JST) if not specified
         if not time_min:
             import datetime
-            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            # Use JST for "now"
+            tz_jst = datetime.timezone(datetime.timedelta(hours=9))
+            now = datetime.datetime.now(tz_jst).isoformat()
             time_min = now
             
         events_result = service.events().list(

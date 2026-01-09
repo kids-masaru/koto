@@ -302,8 +302,13 @@ def get_gemini_response(user_id, user_message, image_data=None, mime_type=None):
     except Exception as e:
         print(f"RAG context error: {e}", file=sys.stderr)
     
+    # Current Date/Time context (CRITICAL for model awareness)
+    import datetime
+    now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S (%A)')
+    time_context = f"\n【★現在日時★】\n本日は {now_str} です。ユーザーから「今日」「明日」と言われたらこの日付を基準にしてください。\n"
+
     # Combine prompts with RAG and Profile context
-    full_system_prompt = SYSTEM_PROMPT + personality_section + profile_section + user_name_section + knowledge_context + master_prompt_section + rag_context
+    full_system_prompt = SYSTEM_PROMPT + time_context + personality_section + profile_section + user_name_section + knowledge_context + master_prompt_section + rag_context
     
     # Build conversation contents
     contents = [] # Initialize properly
