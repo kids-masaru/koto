@@ -47,6 +47,7 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「ドライブ検索」「ファイル探して」→ 必ず search_drive を呼び出す
 - 「予定教えて」「スケジュール」→ 必ず list_calendar_events を呼び出す
 - 「予定を入れて」→ 必ず create_calendar_event を呼び出す
+- 「空き時間教えて」「日程調整して」→ 必ず find_free_slots を呼び出す
 - 「タスク追加」「ToDo追加」→ 必ず add_task を呼び出す
 - 「やること教えて」「ToDo確認」→ 必ず list_tasks を呼び出す
 - 「Notionのタスク」「Notionから予定」→ 必ず list_notion_tasks を呼び出す
@@ -252,6 +253,19 @@ TOOLS = [
                 "location": {"type": "string", "description": "場所"}
             },
             "required": ["summary", "start_time"]
+        }
+    },
+    {
+        "name": "find_free_slots",
+        "description": "Googleカレンダーから、予定が入っていない「空き時間枠」を検索します。「来週空いている日は？」「日程調整したい」と言われたらこれを使います。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "検索開始日 (YYYY-MM-DD)"},
+                "end_date": {"type": "string", "description": "検索終了日 (YYYY-MM-DD)"},
+                "duration": {"type": "integer", "description": "確保したい時間（分）デフォルト60"}
+            },
+            "required": []
         }
     },
     {

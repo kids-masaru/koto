@@ -24,7 +24,7 @@ def execute_tool(tool_name, args, user_id=None):
     from tools.google_ops import (
         create_google_doc, create_google_sheet, create_google_slide,
         search_drive, list_gmail, get_gmail_body,
-        list_calendar_events, create_calendar_event,
+        list_calendar_events, create_calendar_event, find_free_slots,
         list_tasks, add_task
     )
     from utils.user_db import register_user
@@ -78,6 +78,12 @@ def execute_tool(tool_name, args, user_id=None):
             args.get("start_time"),
             args.get("end_time"),
             args.get("location")
+        )
+    elif tool_name == "find_free_slots":
+        return find_free_slots(
+            args.get("start_date"),
+            args.get("end_date"),
+            args.get("duration", 60)
         )
     elif tool_name == "list_tasks":
         return list_tasks(args.get("show_completed", False), args.get("due_date"))

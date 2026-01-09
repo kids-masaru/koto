@@ -310,7 +310,106 @@ def create_calendar_event(summary, start_time, end_time=None, location=None):
         
     except Exception as e:
         print(f"Calendar create error: {e}", file=sys.stderr)
-        return {"error": f"予定作成中にエラーが発生しました: {str(e)}"}
+        return {"error": f"予定の作成中にエラーが発生しました: {str(e)}"}
+
+
+def find_free_slots(start_date=None, end_date=None, duration_minutes=60, work_start=10, work_end=18):
+    """Find free time slots in calendar"""
+    try:
+        from datetime import datetime, timedelta, timezone
+        
+        # JST Timezone
+        jst = timezone(timedelta(hours=9))
+        
+        # Default: Search from tomorrow to 7 days ahead
+        if not start_date:
+            start_date = (datetime.now(jst) + timedelta(days=1)).strftime('%Y-%m-%d')
+        if not end_date:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+            end_date = (start_dt + timedelta(days=7)).strftime('%Y-%m-%d')
+            
+        # Parse Dates
+        dt_start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=jst)
+        dt_end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=jst)
+        
+        # Get existing events
+        # Note: We query all events in the range
+        existing_revents_res = list_calendar_events(
+            time_min=dt_start.isoformat(), 
+            time_max=dt_end.isoformat()
+        )
+        if "error" in existing_revents_res:
+             return existing_revents_res
+             
+        existing_events = existing_revents_res.get('events', [])
+        
+        # Convert existing events to datetime objects for collision check
+        busy_slots = []
+        for e in existing_events:
+            start = e.get('start', {}).get('dateTime') or e.get('start', {}).get('date')
+            end = e.get('end', {}).get('dateTime') or e.get('end', {}).get('date')
+            if start and end:
+                # Handle full day events (date only) by creating datetime
+                if 'T' not in start: 
+                    s_dt = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=jst)
+                    e_dt = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=jst)
+                else: 
+                     # Parse ISO format (likely contains offset)
+                     from dateutil import parser
+                     s_dt = parser.parse(start)
+                     e_dt = parser.parse(end)
+                busy_slots.append((s_dt, e_dt))
+
+        # Scan availability
+        available_slots = []
+        current_day = dt_start
+        
+        while current_day <= dt_end:
+            # Skip Weekends? (Optional: Making it configurable or assumption-based)
+            # For now, include weekends but maybe warn? Let's treat all days equal for now.
+            
+            # Define working hours for this day
+            day_start = current_day.replace(hour=work_start, minute=0, second=0, microsecond=0)
+            day_end = current_day.replace(hour=work_end, minute=0, second=0, microsecond=0)
+            
+            curr = day_start
+            while curr + timedelta(minutes=duration_minutes) <= day_end:
+                slot_end = curr + timedelta(minutes=duration_minutes)
+                
+                # Check collision
+                is_busy = False
+                for b_start, b_end in busy_slots:
+                    # Logic: overlapping if (StartA < EndB) and (EndA > StartB)
+                    if curr < b_end and slot_end > b_start:
+                        is_busy = True
+                        break
+                
+                if not is_busy:
+                    # Format neatly
+                    available_slots.append(
+                        f"{curr.strftime('%m/%d(%a) %H:%M')} - {slot_end.strftime('%H:%M')}"
+                    )
+                    
+                # Move forward (Interval 30 mins to offer flexibility?)
+                # Let's move by 60 mins (duration) or shorter interval? 
+                # 30 mins step gives more options.
+                curr += timedelta(minutes=60) # Simple hourly slots for prompt simplicity
+                
+                if len(available_slots) >= 10: # Limit result size
+                    break
+            
+            if len(available_slots) >= 10:
+                break
+            current_day += timedelta(days=1)
+            
+        if not available_slots:
+            return "指定された期間に空き時間は見つかりませんでした。"
+            
+        return "\n".join(available_slots)
+        
+    except Exception as e:
+        print(f"Free slots check error: {e}", file=sys.stderr)
+        return {"error": f"空き時間の検索中にエラーが発生しました: {str(e)}"}
 
 
 def list_tasks(show_completed=False, due_date=None):
