@@ -300,43 +300,24 @@ def get_gemini_response(user_id, user_message, image_data=None, mime_type=None):
     # Combine prompts with RAG and Profile context
     full_system_prompt = SYSTEM_PROMPT + personality_section + profile_section + user_name_section + knowledge_context + master_prompt_section + rag_context
     
+    # Build conversation contents
+    contents = [] # Initialize properly
+    
+    # 1. System Prompt (as fake user message 1)
+    contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
     contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
     
+    # 2. History
+    # Iterate history but skip the last one if we are rebuilding logic? 
+    # Actually, history comes from `get_user_history`.
+    # We should just append all history.
     for msg in history:
         contents.append({
             "role": msg["role"] if msg["role"] == "model" else "user",
             "parts": [{"text": msg["text"]}]
         })
-        
     # Append current message (with Image if present)
     import base64
-    current_parts = [{"text": full_system_prompt}] # Wait, system prompt is prepended... messy strategy.
-    
-    # Better strategy: 
-    # 1. System Prompt (as fake user message 1)
-    # 2. History
-    # 3. Current Message (User Text + Image)
-    
-    # We are rebuilding contents logic here
-    contents = []
-    
-    # System Instruction (Implicitly handled by putting it in first user message or separate system_instruction field)
-    # We will prepend it to the *current* message to ensure it's seen, OR rely on history structure.
-    # The original code put it in first message.
-    
-    # Reconstruct history proper
-    # First turn: System Prompt User -> Model "Understood"
-    contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
-    contents.append({"role": "model", "parts": [{"text": "Understood."}]})
-    
-    # History
-    for msg in history[:-1]: # Exclude the just-added current message
-         contents.append({
-            "role": msg["role"] if msg["role"] == "model" else "user",
-            "parts": [{"text": msg["text"]}]
-        })
-        
-    # Current Message
     current_parts = []
     if image_data and mime_type:
         b64_data = base64.b64encode(image_data).decode('utf-8')
