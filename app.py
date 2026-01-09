@@ -286,18 +286,31 @@ def webhook():
             if message_type == 'text':
                 user_text = message.get('text', '')
                 print(f"User Text [{user_id[:8]}]: {user_text}", file=sys.stderr)
-                process_message_async(user_id, user_text, reply_token)
+                # Run in background thread to return 200 OK immediately
+                thread = threading.Thread(
+                    target=process_message_async,
+                    args=(user_id, user_text, reply_token)
+                )
+                thread.start()
                 
             elif message_type == 'image':
                 message_id = message.get('id')
                 print(f"User Image [{user_id[:8]}] ID: {message_id}", file=sys.stderr)
-                process_message_async(user_id, "", reply_token, message_id=message_id, message_type='image')
+                thread = threading.Thread(
+                    target=process_message_async,
+                    args=(user_id, "", reply_token, message_id, 'image')
+                )
+                thread.start()
                 
             elif message_type == 'file':
                 message_id = message.get('id')
                 filename = message.get('fileName')
                 print(f"User File [{user_id[:8]}] Name: {filename}", file=sys.stderr)
-                process_message_async(user_id, "", reply_token, message_id=message_id, message_type='file', filename=filename)
+                thread = threading.Thread(
+                    target=process_message_async,
+                    args=(user_id, "", reply_token, message_id, 'file', filename)
+                )
+                thread.start()
         
         elif event_type == 'follow':
             reply_token = event.get('replyToken')
