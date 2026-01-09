@@ -315,26 +315,26 @@ function App() {
 
               {/* Profiler Prompt */}
               <div className="border-t border-gray-100 pt-6">
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Profiler (Biographer)</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Biographer (Profiler Agent)</label>
                 <textarea
                   value={config.profiler_prompt || ''}
                   onChange={e => setConfig({ ...config, profiler_prompt: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
                   rows={6}
-                  placeholder="Profilerのシステムプロンプト（空欄の場合はデフォルトが使用されます）"
+                  placeholder="伝記作家（Biographer）へのシステムプロンプト（あなたのプロファイルをどう分析するか）"
                 />
                 <p className="text-xs text-gray-400 mt-2">※夜間に起動し、あなたのログを分析してプロファイルを更新するエージェントへの指示</p>
               </div>
 
               {/* Maker Prompt */}
               <div className="border-t border-gray-100 pt-6">
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Maker (Document Creator)</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Fumi (Maker Agent)</label>
                 <textarea
                   value={config.maker_prompt || ''}
                   onChange={e => setConfig({ ...config, maker_prompt: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
                   rows={6}
-                  placeholder="Makerのシステムプロンプト（空欄の場合はデフォルトが使用されます）"
+                  placeholder="フミさんへのシステムプロンプト（資料作成、リサーチ時の振る舞い）"
                 />
                 <p className="text-xs text-gray-400 mt-2">※「資料まとめて」等の依頼を受けた際に起動する、リサーチ＆執筆専門エージェントへの指示</p>
               </div>

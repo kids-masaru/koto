@@ -111,6 +111,9 @@ def execute_tool(tool_name, args, user_id=None):
             if notion_dbs:
                 database_id = notion_dbs[0].get("id", "")
         return create_notion_task(database_id, args.get("title", ""), args.get("due_date"), args.get("status"))
+    elif tool_name == "update_notion_task":
+        from tools.notion_ops import update_notion_task
+        return update_notion_task(args.get("page_id"), args.get("status"), args.get("title"))
     elif tool_name == "delegate_to_maker":
         from core.maker import maker
         response_text = maker.run(args.get("request", ""))

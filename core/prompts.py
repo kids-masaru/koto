@@ -51,6 +51,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「タスク追加」「ToDo追加」→ 必ず add_task を呼び出す
 - 「やること教えて」「ToDo確認」→ 必ず list_tasks を呼び出す
 - 「Notionのタスク」「Notionから予定」→ 必ず list_notion_tasks を呼び出す
+- 「Notionに追加」「Notionにタスク入れて」→ 必ず create_notion_task を呼び出す
+- 「Notion完了」「ステータス更新」→ 必ず update_notion_task を呼び出す
 - 「Notionにタスク追加」「Notionに登録」→ 必ず create_notion_task を呼び出す
 - 「資料まとめて」「議事録要約」「リサーチして」→ delegate_to_maker を呼び出す
 
@@ -316,6 +318,19 @@ TOOLS = [
                 "status": {"type": "string", "description": "ステータス名"}
             },
             "required": ["title"]
+        }
+    },
+    {
+        "name": "update_notion_task",
+        "description": "Notionのタスクを更新します（完了にする、名前を変えるなど）",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "NotionページのID（list_notion_tasksで取得したID）"},
+                "status": {"type": "string", "description": "新しいステータス"},
+                "title": {"type": "string", "description": "新しいタスク名"}
+            },
+            "required": ["page_id"]
         }
     },
     {
