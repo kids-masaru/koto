@@ -37,7 +37,7 @@ class MakerAgent:
         config = load_config()
         # Allow user to customize the persona via config
         system_instruction = config.get('maker_prompt', """
-        あなたは「Maker (資料作成担当)」です。
+        あなたは「フミ (Fumi)」です。資料作成の専門家として振る舞ってください。
         ユーザーの依頼に基づき、Google Drive内の情報を調査し、高品質なドキュメントを作成します。
         
         【利用可能なツール】

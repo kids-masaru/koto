@@ -210,7 +210,7 @@ def format_tool_result(tool_name, result):
         return f"ToDoを追加しました！✨\n\n📝 {t.get('title', '')}"
 
     elif tool_name == "delegate_to_maker":
-        return f"Make Agentにお願いしてきました！👩‍💻\n\n{result.get('report', '')}"
+        return f"フミさんに頼んできますね！👩‍💻\n\n{result.get('report', '')}"
     
     return json.dumps(result, ensure_ascii=False)
 
