@@ -75,38 +75,44 @@ def google_web_search(query, num_results=3):
         # Execute search
         search_results = []
         # Set timeout to avoid Reply Token expiration
-        with DDGS(timeout=5) as ddgs:
-            # 1. Try 'text' backend with JP region
-            try:
-                results = list(ddgs.text(query, region='jp-jp', max_results=num_results))
-            except Exception as e:
-                print(f"DDG JP Search Error: {e}", file=sys.stderr)
-                results = []
-            
-            # 2. If no results, try Global region (wt-wt)
-            if not results:
+        # Suppress the warning by using the package correctly if we can, 
+        # but the warning is internal to the library's packaging.
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with DDGS(timeout=10) as ddgs:
+                # 1. Try 'text' backend with JP region and 'html' backend (more robust)
                 try:
-                    print("JP search empty, trying global...", file=sys.stderr)
-                    results = list(ddgs.text(query, region='wt-wt', max_results=num_results))
+                    # 'lite' or 'html' backend is often better for server IPs
+                    results = list(ddgs.text(query, region='jp-jp', max_results=num_results, backend='html'))
                 except Exception as e:
-                    print(f"DDG Global Search Error: {e}", file=sys.stderr)
+                    print(f"DDG JP Search Error: {e}", file=sys.stderr)
                     results = []
+                
+                # 2. If no results, try Global region
+                if not results:
+                    try:
+                        print("JP search empty, trying global...", file=sys.stderr)
+                        results = list(ddgs.text(query, region='wt-wt', max_results=num_results, backend='html'))
+                    except Exception as e:
+                        print(f"DDG Global Search Error: {e}", file=sys.stderr)
+                        results = []
 
-            for r in results:
-                search_results.append({
-                    "title": r.get('title', 'No Title'),
-                    "url": r.get('href', ''),
-                    "snippet": r.get('body', '') or r.get('snippet', '')
-                })
+                for r in results:
+                    search_results.append({
+                        "title": r.get('title', 'No Title'),
+                        "url": r.get('href', ''),
+                        "snippet": r.get('body', '') or r.get('snippet', '')
+                    })
         
         # Fallback: If no results found (likely IP blocked), return a direct search URL
         if not search_results:
             print("Search returned 0 results. Using fallback URL.", file=sys.stderr)
             search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
             search_results.append({
-                "title": f"Google検索: {query}",
+                "title": f"Google検索結果 (ここをクリック): {search_url}",
                 "url": search_url,
-                "snippet": "検索結果をうまく読み取れませんでした。リンク先で直接確認してください。"
+                "snippet": f"検索結果を読み取れませんでした。こちらのリンクから直接確認してください: {search_url}"
             })
         
         return {
