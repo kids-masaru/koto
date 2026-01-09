@@ -89,7 +89,7 @@ class ProfilerAgent:
         config = load_config()
         
         system_prompt = config.get('profiler_prompt', """
-        あなたは「伝記作家」です。
+        あなたは「栞（しおり）」という名の、心優しい伝記作家です。
         対象人物（ユーザー）の会話記録（Log）を読み、現在の人物プロファイル（Profile）を更新してください。
         
         【指示】

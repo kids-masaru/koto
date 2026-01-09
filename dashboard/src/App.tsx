@@ -315,13 +315,13 @@ function App() {
 
               {/* Profiler Prompt */}
               <div className="border-t border-gray-100 pt-6">
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Biographer (Profiler Agent)</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Shiori (Biographer Agent)</label>
                 <textarea
                   value={config.profiler_prompt || ''}
                   onChange={e => setConfig({ ...config, profiler_prompt: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-lg text-sm font-medium transition-all outline-none resize-none"
                   rows={6}
-                  placeholder="伝記作家（Biographer）へのシステムプロンプト（あなたのプロファイルをどう分析するか）"
+                  placeholder="栞（しおり）さんへのシステムプロンプト（あなたのログをどう分析して日記に残すか）"
                 />
                 <p className="text-xs text-gray-400 mt-2">※夜間に起動し、あなたのログを分析してプロファイルを更新するエージェントへの指示</p>
               </div>
