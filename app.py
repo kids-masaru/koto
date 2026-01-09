@@ -190,28 +190,40 @@ def process_message_async(user_id, user_text, reply_token=None, message_id=None,
             mime = 'image/jpeg' if message_type == 'image' else None 
             if not mime:
                 mime, _ = mimetypes.guess_type(filename)
+                
+            if not mime: mime = 'application/octet-stream' # Fallback
             
             print(f"Uploading {filename} (mime={mime})", file=sys.stderr)
             result = upload_file_to_drive(filename, content, mime_type=mime)
             
             if result.get("success"):
                 file_url = result.get("url")
+                file_id = result.get("file_id")
                 # User didn't say anything, but the act of uploading is the message.
                 # format as a system notification to the agent
-                user_text = f"【システム通知】ユーザーがファイルをアップロードしました。\nファイル名: {filename}\n保存先URL: {file_url}\n(このファイルの内容について聞かれたら Maker Agent 等を使ってください)"
+                # Include File ID for Maker Agent
+                user_text = f"【システム通知】ユーザーがファイルをアップロードしました。\nファイル名: {filename}\nファイルID: {file_id}\n保存先URL: {file_url}\n\nこのファイルはGoogle Driveに保存されました。Maker Agentを使って内容を読んだり要約したりできます。"
                 
-                # Notify user immediately (Optional, but good UX)
-                # But we want KOTO to reply naturally, so maybe let KOTO generate the reply.
-                # However, KOTO might take time. Let's rely on KOTO.
+                # If it's an image, pass content to Gemini for immediate understanding
+                image_data = None
+                image_mime = None
+                if message_type == 'image':
+                    image_data = content
+                    image_mime = mime
+                    user_text += "\nまた、この画像の内容は添付データとして送信されています。何が写っているか聞かれたら答えてください。"
+
             else:
                 error = result.get("error", "Unknown error")
+                print(f"Upload failed: {error}", file=sys.stderr)
                 if reply_token:
                     reply_message(reply_token, f"ドライブへの保存に失敗しました...😢\n{error}")
                 return
 
         # Normal Agent Flow (Text or converted System Text)
         print(f"Agent Input: {user_text}", file=sys.stderr)
-        ai_response = get_gemini_response(user_id, user_text)
+        
+        # Pass image data if available
+        ai_response = get_gemini_response(user_id, user_text, image_data=locals().get('image_data'), mime_type=locals().get('image_mime'))
         
         print(f"Koto response: {ai_response[:100]}...", file=sys.stderr)
         

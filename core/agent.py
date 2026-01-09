@@ -215,18 +215,24 @@ def format_tool_result(tool_name, result):
     return json.dumps(result, ensure_ascii=False)
 
 
-def get_gemini_response(user_id, user_message):
+def get_gemini_response(user_id, user_message, image_data=None, mime_type=None):
     """Get response from Gemini API with function calling and conversation history"""
     if not GEMINI_API_KEY:
         return "APIキーが設定されていません〜"
     
     # Add user message to history
-    add_message(user_id, "user", user_message)
+    # If image is present, we only log [Image] marker in text history for now
+    log_message = user_message
+    if image_data:
+        log_message += " [添付画像あり]"
+    add_message(user_id, "user", log_message)
     
     # Get conversation history
     history = get_user_history(user_id)
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
+    # Use gemini-2.0-flash-exp (or gemini-1.5-pro) for Multimodal
+    # gemini-3-flash-preview is also capable
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"
     
     headers = {'Content-Type': 'application/json'}
     
@@ -294,9 +300,6 @@ def get_gemini_response(user_id, user_message):
     # Combine prompts with RAG and Profile context
     full_system_prompt = SYSTEM_PROMPT + personality_section + profile_section + user_name_section + knowledge_context + master_prompt_section + rag_context
     
-    # Build conversation contents
-    contents = []
-    contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
     contents.append({"role": "model", "parts": [{"text": "Understood. I will act immediately using tools without unnecessary chatter."}]})
     
     for msg in history:
@@ -304,6 +307,48 @@ def get_gemini_response(user_id, user_message):
             "role": msg["role"] if msg["role"] == "model" else "user",
             "parts": [{"text": msg["text"]}]
         })
+        
+    # Append current message (with Image if present)
+    import base64
+    current_parts = [{"text": full_system_prompt}] # Wait, system prompt is prepended... messy strategy.
+    
+    # Better strategy: 
+    # 1. System Prompt (as fake user message 1)
+    # 2. History
+    # 3. Current Message (User Text + Image)
+    
+    # We are rebuilding contents logic here
+    contents = []
+    
+    # System Instruction (Implicitly handled by putting it in first user message or separate system_instruction field)
+    # We will prepend it to the *current* message to ensure it's seen, OR rely on history structure.
+    # The original code put it in first message.
+    
+    # Reconstruct history proper
+    # First turn: System Prompt User -> Model "Understood"
+    contents.append({"role": "user", "parts": [{"text": full_system_prompt}]})
+    contents.append({"role": "model", "parts": [{"text": "Understood."}]})
+    
+    # History
+    for msg in history[:-1]: # Exclude the just-added current message
+         contents.append({
+            "role": msg["role"] if msg["role"] == "model" else "user",
+            "parts": [{"text": msg["text"]}]
+        })
+        
+    # Current Message
+    current_parts = []
+    if image_data and mime_type:
+        b64_data = base64.b64encode(image_data).decode('utf-8')
+        current_parts.append({
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": b64_data
+            }
+        })
+    current_parts.append({"text": user_message})
+    
+    contents.append({"role": "user", "parts": current_parts})
     
     data = {
         "contents": contents,
