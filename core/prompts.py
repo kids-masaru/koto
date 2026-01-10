@@ -194,9 +194,10 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "folder_name": {"type": "string", "description": "作成するフォルダの名前"}
-            },
+            "required": ["folder_name"]
         }
     },
+    {
         "name": "move_drive_file",
         "description": "Googleドライブのファイルを別のフォルダに移動します。整理整頓に使います。",
         "parameters": {
