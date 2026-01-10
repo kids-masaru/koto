@@ -184,6 +184,35 @@ def search_drive(query):
         ).execute()
         
         files = results.get('files', [])
+        
+        # Enhancement: If result includes a folder, list its contents proactively
+        # This solves "Found folder but don't know content"
+        try:
+            expanded_results = []
+            for f in files:
+                expanded_results.append(f)
+                if f.get('mimeType') == 'application/vnd.google-apps.folder':
+                    # List children
+                    children_res = drive_service.files().list(
+                        q=f"'{f['id']}' in parents and trashed=false",
+                        pageSize=10, 
+                        fields="files(id, name, mimeType, webViewLink, modifiedTime)",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True
+                    ).execute()
+                    children = children_res.get('files', [])
+                    for c in children:
+                        c['parent_folder_name'] = f['name']
+                        expanded_results.append(c)
+            
+            # Update files list with expanded content
+            if expanded_results:
+                files = expanded_results
+                
+        except Exception as e:
+            print(f"Folder expansion error: {e}", file=sys.stderr)
+            # Proceed with original results if expansion fails
+
         return {"success": True, "files": files, "count": len(files)}
     except Exception as e:
         return {"error": f"検索中にエラーが発生しました: {str(e)}"}

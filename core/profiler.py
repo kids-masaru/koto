@@ -8,6 +8,16 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional
 import google.generativeai as genai
+# Note: The user log says "support ended", suggesting a very new version or warning.
+# However, for now we stick to what works in `agent.py` or just suppress warning.
+# Actually, the error `Expecting value` was main crash. 
+# We'll just keep `google.generativeai` but with better error handling as applied.
+# Wait, I should synchronize with agent.py if possible. 
+# agent.py imports: `from core.agent import get_gemini_response` (in app.py)
+# agent.py uses `genai` from `google.generativeai`.
+# So let's double check if I need to change import. 
+# The log warning says "Please switch to `google.genai` package".
+# For now, I'll ignore the warning and rely on logic fix. 
 from utils.vector_store import _get_index, GeminiEmbedder
 
 # Configure Gemini
@@ -60,7 +70,15 @@ class ProfilerAgent:
         if not index: return []
         
         embedder = GeminiEmbedder()
-        vector = embedder.embed_text("私について 好き 嫌い 考え 価値観") # Query for self-disclosure
+        # Use a safe query text. If empty, Pinecone errors.
+        query_text = "私について 好き 嫌い 考え 価値観"
+        vector = embedder.embed_text(query_text)
+        
+        # Check if vector is valid (non-zero) - though embed_text usually handles this.
+        # But if embedder fails, it might return None or list of zeros?
+        if not vector or all(v == 0 for v in vector):
+            print("Profiler Warning: Generated zero vector for query.", file=sys.stderr)
+            return []
         
         results = index.query(
             vector=vector,
@@ -122,11 +140,18 @@ class ProfilerAgent:
             response = self.model.generate_content(prompt)
             text = response.text.strip()
             # Clean up markdown code blocks if present
-            if text.startswith("```json"):
-                text = text[7:-3]
+            if "```json" in text:
+                import re
+                match = re.search(r'```json\n(.*?)\n```', text, re.DOTALL)
+                if match:
+                    text = match.group(1)
+            elif "```" in text:
+                 text = text.replace("```", "")
+            
             return json.loads(text)
         except Exception as e:
             print(f"Profiler Logic Error: {e}", file=sys.stderr)
+            # Return current profile instead of crashing, so we don't wipe data
             return current_profile
 
     def _load_current_profile(self, user_id: str) -> Dict:
