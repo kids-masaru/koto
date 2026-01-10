@@ -6,7 +6,7 @@ import os
 import sys
 import json
 import google.generativeai as genai
-from tools.google_ops import search_drive, read_drive_file, create_google_doc, create_google_sheet, create_google_slide
+from tools.google_ops import search_drive, read_drive_file, create_google_doc, create_google_sheet, create_google_slide, move_drive_file, create_drive_folder
 from utils.sheets_config import load_config
 
 class MakerAgent:
@@ -17,7 +17,7 @@ class MakerAgent:
             genai.configure(api_key=self.api_key)
             
         # Define the specific tools for this agent
-        self.tools = [search_drive, read_drive_file, create_google_doc, create_google_sheet, create_google_slide]
+        self.tools = [search_drive, read_drive_file, create_google_doc, create_google_sheet, create_google_slide, move_drive_file, create_drive_folder]
         
         self.model = genai.GenerativeModel(
             model_name=self.model_name,

@@ -195,6 +195,41 @@ def create_drive_folder(folder_name):
         return {"error": f"フォルダ作成中にエラーが発生しました: {str(e)}"}
 
 
+def move_drive_file(file_id, folder_id):
+    """Move a file to a specific folder in Google Drive"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+             return {"error": "Google認証に失敗しました。"}
+             
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # 1. Get current parents
+        file = drive_service.files().get(
+            fileId=file_id,
+            fields='parents',
+            supportsAllDrives=True
+        ).execute()
+        previous_parents = ",".join(file.get('parents', []))
+        
+        # 2. Add new parent, remove old parents
+        file = drive_service.files().update(
+            fileId=file_id,
+            addParents=folder_id,
+            removeParents=previous_parents,
+            fields='id, parents',
+            supportsAllDrives=True
+        ).execute()
+        
+        return {
+            "success": True, 
+            "file_id": file.get('id'),
+            "message": f"ファイルを移動しました (Folder ID: {folder_id})"
+        }
+    except Exception as e:
+        return {"error": f"ファイル移動中にエラーが発生しました: {str(e)}"}
+
+
 def search_drive(query):
     """Search Google Drive for files"""
     try:

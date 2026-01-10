@@ -197,6 +197,17 @@ TOOLS = [
             },
             "required": ["folder_name"]
         }
+    {
+        "name": "move_drive_file",
+        "description": "Googleドライブのファイルを別のフォルダに移動します。整理整頓に使います。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "string", "description": "移動するファイルのID"},
+                "folder_id": {"type": "string", "description": "移動先のフォルダID"}
+            },
+            "required": ["file_id", "folder_id"]
+        }
     },
     {
         "name": "search_drive",
@@ -349,11 +360,11 @@ TOOLS = [
     },
     {
         "name": "delegate_to_maker",
-        "description": "「資料作成」「要約」「リサーチ」などの依頼を、『Maker Agent (資料作成専門家)』に委任します。ドライブ内の複数ファイルを読んでまとめたり、長文のドキュメントを作成する場合に使います。",
+        "description": "「資料作成」「整理」「リサーチ」などの依頼を、『Maker Agent (資料作成専門家)』に委任します。フォルダの作成やファイルの移動・整理も可能です。",
         "parameters": {
             "type": "object",
             "properties": {
-                "request": {"type": "string", "description": "Makerへの具体的な指示内容（例: '今月の会議議事録を検索して要約を作成して'）"}
+                "request": {"type": "string", "description": "Makerへの具体的な指示内容（例: 'kotoフォルダ内の重複ファイルを整理して'）"}
             },
             "required": ["request"]
         }

@@ -22,7 +22,7 @@ def execute_tool(tool_name, args, user_id=None):
     from tools.web_ops import google_web_search, fetch_url
     from tools.weather import get_current_weather
     from tools.google_ops import (
-        create_google_doc, create_google_sheet, create_google_slide, create_drive_folder,
+        create_google_doc, create_google_sheet, create_google_slide, create_drive_folder, move_drive_file,
         search_drive, list_gmail, get_gmail_body,
         list_calendar_events, create_calendar_event, find_free_slots,
         list_tasks, add_task
@@ -58,6 +58,8 @@ def execute_tool(tool_name, args, user_id=None):
         return create_google_slide(args.get("title", "新規スライド"))
     elif tool_name == "create_drive_folder":
         return create_drive_folder(args.get("folder_name", "新規フォルダ"))
+    elif tool_name == "move_drive_file":
+        return move_drive_file(args.get("file_id"), args.get("folder_id"))
     elif tool_name == "search_drive":
         return search_drive(args.get("query", ""))
     elif tool_name == "list_gmail":
