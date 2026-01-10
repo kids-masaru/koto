@@ -176,7 +176,7 @@ def search_drive(query):
         # Search includes Shared Drives
         results = drive_service.files().list(
             q=f"name contains '{safe_query}' and trashed=false",
-            pageSize=10,
+            pageSize=100,
             fields="files(id, name, mimeType, webViewLink, modifiedTime)",
             corpora='allDrives',
             includeItemsFromAllDrives=True,
@@ -195,7 +195,7 @@ def search_drive(query):
                     # List children
                     children_res = drive_service.files().list(
                         q=f"'{f['id']}' in parents and trashed=false",
-                        pageSize=10, 
+                        pageSize=100, 
                         fields="files(id, name, mimeType, webViewLink, modifiedTime)",
                         supportsAllDrives=True,
                         includeItemsFromAllDrives=True
