@@ -41,7 +41,13 @@ def load_all_history():
             print(f"Error loading history: {e}")
             _history_cache = defaultdict(list)
     else:
-        _history_cache = defaultdict(list)
+        # Try restoration from Drive if local file missing (e.g. after restart)
+        restored = _restore_from_drive()
+        if restored:
+            _history_cache = defaultdict(list, restored)
+            print("History restored from Drive!", file=sys.stderr)
+        else:
+            _history_cache = defaultdict(list)
     
     return _history_cache
 
@@ -63,6 +69,63 @@ def save_all_history():
         print(f"Warning: History save skipped (Read-only FS): {e}", file=sys.stderr)
     except Exception as e:
         print(f"Error saving history: {e}", file=sys.stderr)
+    
+    # Backup to Drive (Async would be better but keeping it simple first)
+    try:
+        from tools.google_ops import upload_file_to_drive, search_drive, read_drive_file
+        import threading
+        
+        def _backup_task():
+            # JSON dump to string
+            json_str = json.dumps(dict(_history_cache), ensure_ascii=False, indent=2)
+            # Find existing backup file to overwrite?
+            # actually upload_file_to_drive creates new file by default. 
+            # We should probably update. But `google_ops` is simple.
+            # Let's search for "koto_history_backup.json" first.
+            res = search_drive("koto_history_backup.json")
+            files = res.get("files", [])
+            file_id = None
+            if files:
+                file_id = files[0]['id']
+            
+            if file_id:
+                # Update existing
+                from googleapiclient.discovery import build
+                from googleapiclient.http import MediaIoBaseUpload
+                from utils.auth import get_google_credentials
+                import io
+                creds = get_google_credentials()
+                service = build('drive', 'v3', credentials=creds)
+                media = MediaIoBaseUpload(io.BytesIO(json_str.encode('utf-8')), mimetype='application/json', resumable=True)
+                service.files().update(fileId=file_id, media_body=media).execute()
+            else:
+                # Create new
+                upload_file_to_drive("koto_history_backup.json", json_str.encode('utf-8'), mime_type='application/json')
+                
+        # Run in background to not block reply
+        threading.Thread(target=_backup_task).start()
+        
+    except Exception as e:
+        print(f"Drive backup error: {e}", file=sys.stderr)
+
+def _restore_from_drive():
+    """Try to restore history from Drive"""
+    print("Attempting to restore history from Drive...", file=sys.stderr)
+    try:
+        from tools.google_ops import search_drive, read_drive_file
+        res = search_drive("koto_history_backup.json")
+        files = res.get("files", [])
+        if files:
+            file_id = files[0]['id']
+            # read_drive_file returns content string
+            res_read = read_drive_file(file_id)
+            if res_read.get("success"):
+                content = res_read.get("content", "")
+                if content:
+                    return json.loads(content)
+    except Exception as e:
+        print(f"Drive restore error: {e}", file=sys.stderr)
+    return None
 
 
 def get_user_history(user_id):
