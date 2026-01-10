@@ -187,6 +187,17 @@ TOOLS = [
         }
     },
     {
+        "name": "create_drive_folder",
+        "description": "Googleドライブに新しいフォルダを作成します。「フォルダ作って」と言われたらこれを使います。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "folder_name": {"type": "string", "description": "作成するフォルダの名前"}
+            },
+            "required": ["folder_name"]
+        }
+    },
+    {
         "name": "search_drive",
         "description": "Googleドライブでファイルを検索します",
         "parameters": {

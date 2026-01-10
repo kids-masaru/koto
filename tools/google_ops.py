@@ -161,6 +161,40 @@ def create_google_slide(title):
         return {"error": f"スライド作成中にエラーが発生しました: {str(e)}"}
 
 
+def create_drive_folder(folder_name):
+    """Create a new folder in Google Drive (shared folder if configured)"""
+    try:
+        creds = get_google_credentials()
+        if not creds:
+             return {"error": "Google認証に失敗しました。"}
+             
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        folder_id = get_shared_folder_id()
+        file_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+            
+        file = drive_service.files().create(
+            body=file_metadata,
+            fields='id, webViewLink',
+            supportsAllDrives=True
+        ).execute()
+        
+        return {
+            "success": True, 
+            "folder_name": folder_name, 
+            "id": file.get('id'),
+            "url": file.get('webViewLink')
+        }
+    except Exception as e:
+        return {"error": f"フォルダ作成中にエラーが発生しました: {str(e)}"}
+
+
 def search_drive(query):
     """Search Google Drive for files"""
     try:
