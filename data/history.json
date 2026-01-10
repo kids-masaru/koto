@@ -64,5 +64,12 @@
       "text": "Synchronous backup test message",
       "timestamp": "2026-01-10T18:10:35.410964"
     }
+  ],
+  "test_sync_user_v2": [
+    {
+      "role": "user",
+      "text": "Synchronous backup test message v2",
+      "timestamp": "2026-01-10T18:33:07.687996"
+    }
   ]
 }

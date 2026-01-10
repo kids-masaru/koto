@@ -110,7 +110,11 @@ def backup_history_to_drive():
             service = build('drive', 'v3', credentials=creds)
             # Encode correctly
             media = MediaIoBaseUpload(io.BytesIO(json_str.encode('utf-8')), mimetype='application/json', resumable=True)
-            service.files().update(fileId=file_id, media_body=media).execute()
+            service.files().update(
+                fileId=file_id, 
+                media_body=media,
+                supportsAllDrives=True
+            ).execute()
             print(f"Backup updated: {file_id}", file=sys.stderr)
         else:
             # Create new
