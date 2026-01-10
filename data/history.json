@@ -50,5 +50,19 @@
       "text": "福岡の天気についての検索結果です！\n\n*   tenki.jp: [https://tenki.jp/forecast/9/43/8210/40130/1hour.html](https://tenki.jp/forecast/9/43/8210/40130/1hour.html)\n*   ウェザーニュース: [https://weathernews.jp/onebox/tenki/fukuoka/40130/](https://weathernews.jp/onebox/tenki/fukuoka/40130/)\n*   Yahoo!天気・災害: [https://weather.yahoo.co.jp/weather/jp/40/8210.html](https://weather.yahoo.co.jp/weather/jp/40/8210.html)\n\n詳細が知りたいサイトはありますか？",
       "timestamp": "2026-01-02T21:06:15.414897"
     }
+  ],
+  "test_user_123": [
+    {
+      "role": "user",
+      "text": "Test backup message",
+      "timestamp": "2026-01-10T18:06:53.412409"
+    }
+  ],
+  "test_sync_user": [
+    {
+      "role": "user",
+      "text": "Synchronous backup test message",
+      "timestamp": "2026-01-10T18:10:35.410964"
+    }
   ]
 }

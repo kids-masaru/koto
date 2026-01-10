@@ -66,46 +66,60 @@ def save_all_history():
             json.dump(dict(_history_cache), f, ensure_ascii=False, indent=2)
     except OSError as e:
         # Vercel is read-only. Log warning but don't crash or spam errors.
-        print(f"Warning: History save skipped (Read-only FS): {e}", file=sys.stderr)
+        pass
     except Exception as e:
         print(f"Error saving history: {e}", file=sys.stderr)
     
-    # Backup to Drive (Async would be better but keeping it simple first)
+    # Run backup in background
+    import threading
+    threading.Thread(target=backup_history_to_drive).start()
+
+
+def backup_history_to_drive():
+    """Sync history to Google Drive (koto_history_backup.json)"""
+    global _history_cache
+    if _history_cache is None: 
+        return
+
     try:
-        from tools.google_ops import upload_file_to_drive, search_drive, read_drive_file
-        import threading
+        from tools.google_ops import upload_file_to_drive, search_drive
+        import io
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        from utils.auth import get_google_credentials
+
+        print("Starting Drive backup...", file=sys.stderr)
         
-        def _backup_task():
-            # JSON dump to string
-            json_str = json.dumps(dict(_history_cache), ensure_ascii=False, indent=2)
-            # Find existing backup file to overwrite?
-            # actually upload_file_to_drive creates new file by default. 
-            # We should probably update. But `google_ops` is simple.
-            # Let's search for "koto_history_backup.json" first.
-            res = search_drive("koto_history_backup.json")
-            files = res.get("files", [])
-            file_id = None
-            if files:
-                file_id = files[0]['id']
-            
-            if file_id:
-                # Update existing
-                from googleapiclient.discovery import build
-                from googleapiclient.http import MediaIoBaseUpload
-                from utils.auth import get_google_credentials
-                import io
-                creds = get_google_credentials()
-                service = build('drive', 'v3', credentials=creds)
-                media = MediaIoBaseUpload(io.BytesIO(json_str.encode('utf-8')), mimetype='application/json', resumable=True)
-                service.files().update(fileId=file_id, media_body=media).execute()
-            else:
-                # Create new
-                upload_file_to_drive("koto_history_backup.json", json_str.encode('utf-8'), mime_type='application/json')
+        # JSON dump to string
+        json_str = json.dumps(dict(_history_cache), ensure_ascii=False, indent=2)
+        
+        # Check for existing
+        res = search_drive("koto_history_backup.json")
+        files = res.get("files", [])
+        file_id = None
+        if files:
+            file_id = files[0]['id']
+        
+        if file_id:
+            # Update existing
+            creds = get_google_credentials()
+            if not creds:
+                print("Backup Error: No creds", file=sys.stderr)
+                return
                 
-        # Run in background to not block reply
-        threading.Thread(target=_backup_task).start()
-        
+            service = build('drive', 'v3', credentials=creds)
+            # Encode correctly
+            media = MediaIoBaseUpload(io.BytesIO(json_str.encode('utf-8')), mimetype='application/json', resumable=True)
+            service.files().update(fileId=file_id, media_body=media).execute()
+            print(f"Backup updated: {file_id}", file=sys.stderr)
+        else:
+            # Create new
+            res = upload_file_to_drive("koto_history_backup.json", json_str.encode('utf-8'), mime_type='application/json')
+            print(f"Backup created: {res}", file=sys.stderr)
+            
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Drive backup error: {e}", file=sys.stderr)
 
 def _restore_from_drive():
