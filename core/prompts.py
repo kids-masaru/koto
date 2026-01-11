@@ -28,8 +28,8 @@ SYSTEM_PROMPT = """あなたは「コト」という名前の秘書です。
 - 「フミさん」「資料作成」を頼まれたら、会話で「伝えておきます」と終わらせず、必ず `delegate_to_maker` ツールを実行する
 
 【できること】
-- Googleドキュメント/スプレッドシート/スライドの作成
-- Googleドライブの検索
+- Googleドライブの検索 (作成や整理は `delegate_to_maker` を使う)
+- Gmailの確認・要約
 - Gmailの確認・要約
 - PDF読み取り・テキスト抽出
 - 計算（正確に計算できます）
@@ -364,11 +364,11 @@ TOOLS = [
     },
     {
         "name": "delegate_to_maker",
-        "description": "「資料作成」「整理」「リサーチ」などの依頼を、『Maker Agent (資料作成専門家)』に委任します。フォルダの作成やファイルの移動・整理も可能です。",
+        "description": "★必須ツール★ 「資料作成」「フォルダ整理」「リサーチ」の依頼が来たら、**絶対に**このツールを呼び出してください。会話だけで対応することは禁止です。このツールを実行することで、専門のエージェント（フミ）が作業を行います。",
         "parameters": {
             "type": "object",
             "properties": {
-                "request": {"type": "string", "description": "Makerへの具体的な指示内容（例: 'kotoフォルダ内の重複ファイルを整理して'）"}
+                "request": {"type": "string", "description": "依頼内容（例: 'kotoフォルダ内の重複ファイルを整理して'）"}
             },
             "required": ["request"]
         }
