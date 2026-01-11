@@ -384,6 +384,21 @@ def get_gemini_response(user_id, user_message, image_data=None, mime_type=None):
                     
                     # 1. Check for functionCall (Prioritize over text for loop)
                     function_call_part = next((p for p in parts if 'functionCall' in p), None)
+                    
+                    # --- GUARDRAIL: Force Fumi Delegation if model forgets ---
+                    text_part = next((p.get('text', '') for p in parts if 'text' in p), "")
+                    if not function_call_part and ("ふみさんへのお願い" in text_part or "**依頼:**" in text_part):
+                         print("[DEBUG] Guardrail triggered: Forcing delegate_to_maker", file=sys.stderr)
+                         # Clean up text to extract the request
+                         request_text = text_part
+                         function_call_part = {
+                             'functionCall': {
+                                 'name': 'delegate_to_maker',
+                                 'args': {'request': request_text}
+                             }
+                         }
+                    # ---------------------------------------------------------
+
                     if function_call_part:
                         func_call = function_call_part['functionCall']
                         tool_name = func_call.get('name')
